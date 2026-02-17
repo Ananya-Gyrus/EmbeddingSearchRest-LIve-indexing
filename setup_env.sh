@@ -53,8 +53,8 @@ install_uv() {
         # Install uv for Linux
         curl -LsSf https://astral.sh/uv/install.sh | sh
         
-        # Add uv to PATH for current shell
-        export PATH="$HOME/.cargo/bin:$PATH"
+        # Add uv to PATH for current shell (uv installs to ~/.local/bin by default)
+        export PATH="$HOME/.local/bin:$PATH"
         
         if command_exists uv; then
             print_info "uv installed successfully! Version: $(uv --version)"

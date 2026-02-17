@@ -292,7 +292,7 @@ def preprocess_frames_for_batch(frames):
         traceback.print_exc()
         return None
 
-def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, model, device, index, db_name):
+def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, index, db_name):
     if not clip_tensor_batch:
         return
 
@@ -322,7 +322,6 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     os.makedirs(debug_dir, exist_ok=True)
     video_name = secure_filename(os.path.splitext(os.path.basename(video_path))[0])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, tokenizer, _ = get_embedding_model(device)
 
     def extract_audio_chunks(video_path, chunk_duration=10, is_video=True):
         """
@@ -549,7 +548,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
             
         # Batchwise indexing
         if len(text_clip_tensor_batch) >= AUDIO_BATCH_SIZE:
-            text_embeddings = get_text_embedding_batch(text_clip_tensor_batch, model, tokenizer, device, AUDIO_BATCH_SIZE)
+            text_embeddings = get_text_embedding_batch(text_clip_tensor_batch, device, AUDIO_BATCH_SIZE)
             text_embeddings_np = text_embeddings.cpu().numpy() if text_embeddings is not None else None
             # print("Text embeddings shape:", text_embeddings_np.shape)
             faiss.normalize_L2(text_embeddings_np)
@@ -603,7 +602,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
 
     # Process any remaining audio embeddings in the batch
     if text_clip_tensor_batch:
-        text_embeddings = get_text_embedding_batch(text_clip_tensor_batch, model, tokenizer, device, AUDIO_BATCH_SIZE)
+        text_embeddings = get_text_embedding_batch(text_clip_tensor_batch, device, AUDIO_BATCH_SIZE)
         text_embeddings_np = text_embeddings.cpu().numpy() if text_embeddings is not None else None
         # print("Text embeddings shape:", text_embeddings_np.shape)
         faiss.normalize_L2(text_embeddings_np)
@@ -796,8 +795,6 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                     process_embedding_batch_faiss(
                         current_clip_tensor_batch,
                         current_clip_metadata_batch,
-                        model,
-                        device,
                         index,
                         db_name
                     )
@@ -843,8 +840,6 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
         process_embedding_batch_faiss(
             current_clip_tensor_batch,
             current_clip_metadata_batch,
-            model,
-            device,
             index,
             db_name
         )

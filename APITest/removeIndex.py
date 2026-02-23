@@ -6,7 +6,7 @@ port_num = 5801
 BASE_URL = f"http://127.0.0.1:{port_num}"
 
 remove_url = f"{BASE_URL}/remove-video"
-remove_payload = {"sourceId": "mer"}
+remove_payload = {"sourceId": "mer3"}
 remove_resp = requests.post(remove_url, json=remove_payload)
 print("Remove Video:", remove_resp.json())
 

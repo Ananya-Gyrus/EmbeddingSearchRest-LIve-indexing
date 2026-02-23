@@ -8,6 +8,9 @@ config = get_config()
 def remove_from_index(sourceId, database_name, index_type='both'):
     db_manager = get_db_manager()
     index_files = get_index_files(database_name)
+    if not os.path.exists(index_files['video']) and not os.path.exists(index_files['text']):
+        print(f"Index files not found for database: {database_name}")
+        return
     if index_type in ['video', 'both']:
         video_index = load_index(index_files['video'])
         if video_index is not None:

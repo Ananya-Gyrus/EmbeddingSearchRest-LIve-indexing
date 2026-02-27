@@ -8,7 +8,7 @@ BASE_URL = f"http://127.0.0.1:{port_num}"
 index_url = f"{BASE_URL}/index-videos"
 index_payload = {
     "data": [
-        {"filepath": "meridian.mp4", "sourceId": "mer4", "fps": 30, "useAudio": False},
+        {"filepath": "meridian.mp4", "sourceId": "mer5", "fps": 30, "useAudio": False},
         #  {"filepath": "tearsofsteel.mp4", "sourceId": "tos", "fps": 30, "useAudio": False},
         # {"filepath": "CosmosLaundromat.mp4", "sourceId": "cos", "fps": 30, "useAudio": True}
     ],

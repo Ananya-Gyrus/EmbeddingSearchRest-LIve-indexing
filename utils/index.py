@@ -118,7 +118,7 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
                         end_timecode = FrameTimecode(total_frames, video_fps)
                         scene_list.append((start_timecode, end_timecode))
                     
-                    print(f"Created {len(scene_list)} scenes from manual frame list for {folder_name}")
+                    # print(f"Created {len(scene_list)} scenes from manual frame list for {folder_name}")
                     return scene_list, video_fps
         
         if is_video:
@@ -159,9 +159,9 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
                         optimal_scenes.append((sub_start_tc, sub_end_tc))
             # for start_tc, end_tc in optimal_scenes:
             #     print("Optimal scene:", start_tc.get_frames(), end_tc.get_frames(), "Duration (s):", (end_tc.get_frames() - start_tc.get_frames())/frame_rate)
-            #create final_scenes by merging short scenes, each scene must be less than 6 sec after merging 
+            #create final_scenes by merging short scenes, each scene must be less than 2 sec after merging 
             final_scenes = []
-            target_frames = frame_rate * 6
+            target_frames = frame_rate * 2
             current_start = None
             current_end = None
             for start_tc, end_tc in optimal_scenes:
@@ -173,7 +173,7 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
                 else:
                     current_duration = current_end - current_start 
                     scene_duration = end_frame - start_frame #
-                    # If adding this scene would exceed 6 seconds, save current and start new 
+                    # If adding this scene would exceed 2 seconds, save current and start new 
                     if current_duration + scene_duration > target_frames: 
                         final_scenes.append(( FrameTimecode(current_start, frame_rate), FrameTimecode(current_end, frame_rate) )) 
                         current_start = start_frame
@@ -185,7 +185,9 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
                 
             if current_start is not None and current_end is not None:
                 final_scenes.append((FrameTimecode(current_start, frame_rate), FrameTimecode(current_end, frame_rate)))
-            
+
+            # for start_tc, end_tc in final_scenes:
+            #     print("Final scene:", start_tc.get_frames(), end_tc.get_frames(), "Duration (s):", (end_tc.get_frames() - start_tc.get_frames())/frame_rate)
             scene_list = final_scenes
 
             if not scene_list or len(scene_list) == 0:

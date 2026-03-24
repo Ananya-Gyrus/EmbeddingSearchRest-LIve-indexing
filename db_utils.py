@@ -270,6 +270,35 @@ class DatabaseManager:
         finally:
             session.close()
     
+    def get_transcripts_by_source_id(self, source_id, database_name=None):
+        """Get transcripts for a specific source_id"""
+        session = self.get_session()
+        try:
+            query = session.query(VideoMetadata).filter_by(
+                source_id=source_id,
+                embedding_type='text'
+            )
+            if database_name:
+                query = query.filter_by(database_name=database_name)
+            metadata_records = query.order_by(VideoMetadata.database_name, VideoMetadata.start_frame).all()
+            transcripts = []
+            for record in metadata_records:
+                st_time = float(record.start_time_sec)
+                transcripts.append({
+                    'start_time_sec': st_time,
+                    'end_time_sec': float(record.end_time_sec),
+                    'start_frame': record.start_frame,
+                    'end_frame': record.end_frame,
+                    'text': record.text_content,
+                    'database': record.database_name
+                })
+            return transcripts
+        except Exception as e:
+            print(f"Error retrieving transcripts by source_id: {e}")
+            return []
+        finally:
+            session.close()
+    
     # def get_metadata_by_faiss_id(self, faiss_id, database_name):
     #     """Get metadata for a specific faiss_id"""
     #     session = self.get_session()

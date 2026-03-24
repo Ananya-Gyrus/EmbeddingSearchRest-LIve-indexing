@@ -192,7 +192,7 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
 
             if not scene_list or len(scene_list) == 0:
                 scene_list = []
-                num_scenes = int(total_frames / (frame_rate*6))
+                num_scenes = math.ceil(total_frames / (frame_rate*6))
                 frame_numbers = np.linspace(0, total_frames, num_scenes)
                 frame_numbers.sort()
                 start_frame = 0
@@ -200,14 +200,14 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
                 for frame in frame_numbers:
 
                     if frame > start_frame and frame < total_frames:
-                        start_timecode = FrameTimecode(int(start_frame), video_fps)
-                        end_timecode = FrameTimecode(int(frame), video_fps)
+                        start_timecode = FrameTimecode(int(start_frame), frame_rate)
+                        end_timecode = FrameTimecode(int(frame), frame_rate)
                         scene_list.append((start_timecode, end_timecode))
                         start_frame = frame
 
                 if start_frame < total_frames:
-                    start_timecode = FrameTimecode(int(start_frame), video_fps)
-                    end_timecode = FrameTimecode(int(total_frames), video_fps)
+                    start_timecode = FrameTimecode(int(start_frame), frame_rate)
+                    end_timecode = FrameTimecode(int(total_frames), frame_rate)
                     scene_list.append((start_timecode, end_timecode))
                 
                 
@@ -217,7 +217,7 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
             if not scene_list or len(scene_list) == 0:
                 scene_list = []
                 total_frames = len(os.listdir(video_path))
-                num_scenes = int(total_frames / (video_fps*6))
+                num_scenes = math.ceil(total_frames / (video_fps*6))
                 frame_numbers = np.linspace(0, total_frames, num_scenes)
                 frame_numbers.sort()
                 start_frame = 0
@@ -527,7 +527,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
         if not audio_bytes:
             print(f"Skipping empty audio chunk: {audio_chunk_path}")
             continue
-        text = text_model.transcribe(audio_chunk_path)
+        text = text_model.transcribe(audio_chunk_path, word_timestamps=True)
         new_text =  text['text'] if isinstance(text, dict) and 'text' in text else text
         
         # total_sentences = text_buffer + " " + new_text
@@ -614,10 +614,10 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
                 "video_path_relative": os.path.relpath(video_path, os.path.dirname(config.OUTPUT_DIR)),
                 "embedding_filename": f"{db_name}_{source_id}_chunk_{i:04d}_{sent_num:04d}.txt",
                 "total_scenes": len(audio_chunks),
-                "start_frame": round(start_time * video_fps),
-                "end_frame": round(end_time * video_fps),
-                "start_time_sec": start_time,  # Each chunk is 10 seconds, so start time is chunk index * 10
-                "end_time_sec": end_time,  # Use actual duration for last chunk
+                "start_frame": int(start_time * video_fps),
+                "end_frame": int(end_time * video_fps),
+                "start_time_sec": round(start_time, 3),  # Each chunk is 10 seconds, so start time is chunk index * 10
+                "end_time_sec": round(end_time, 3),  # Use actual duration for last chunk
                 "text": sent,
                 "no_speech_prob": no_speech_probs[sent_num]
             }
@@ -676,10 +676,10 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
             "video_path_relative": os.path.relpath(video_path, os.path.dirname(config.OUTPUT_DIR)),
             "embedding_filename": f"{db_name}_{source_id}_chunk_{i:04d}.txt",
             "total_scenes": len(audio_chunks),
-            "start_time_sec": start_time,  # Each chunk is 10 seconds, so start time is chunk index * 10
-            "end_time_sec": end_time,  # Use actual duration for last chunk
-            "start_frame": round(start_time * video_fps),
-            "end_frame": round(end_time * video_fps),
+            "start_time_sec": round(start_time, 3),  # Each chunk is 10 seconds, so start time is chunk index * 10
+            "end_time_sec": round(end_time, 3),  # Use actual duration for last chunk
+            "start_frame": int(start_time * video_fps),
+            "end_frame": int(end_time * video_fps),
             "text": final_sent,
             "no_speech_prob": no_speech_probs[-1] if no_speech_probs else 0
         }
@@ -844,8 +844,8 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                     "video_path_relative": os.path.relpath(video_path, os.path.dirname(config.OUTPUT_DIR)),
                     "total_scenes": len(scenes),
                     "scene_index": scene_idx,
-                    "start_frame": start_frame,
-                    "end_frame": end_frame,
+                    "start_frame": int(start_frame),
+                    "end_frame": int(end_frame),
                     "start_time_sec": round(start_sec, 3),
                     "end_time_sec": round(end_sec, 3),
                     "duration_sec": round(duration_sec, 3),

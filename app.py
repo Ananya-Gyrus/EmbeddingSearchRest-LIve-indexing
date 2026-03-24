@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request
 import argparse
 from utils.base import initialize_config, initialize_db_config
 from utils.index import index_videos
-from utils.search import search_api, imagesearch_api
+from utils.search import search_api, imagesearch_api, get_transcripts
 from utils.status import get_status
 from utils.licence import check_licence_validation, create_licence_requirement, get_remaining_credit
 from utils.remove import remove_video
@@ -151,6 +151,17 @@ def stream_embeddings_rest():
     #     return jsonify(vec_results), 200
     vec_results = {"message": "Streaming embeddings feature is currently disabled."}
     return jsonify(vec_results), 503
+
+@app.route('/get-transcripts', methods=['POST'])
+def get_transcripts_rest():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    source_id = data.get("sourceId")
+    db_name = data.get("dbName", None)
+    transcripts, status_code = get_transcripts(source_id, db_name)
+    return jsonify({"transcripts": transcripts}), status_code
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=port_num)

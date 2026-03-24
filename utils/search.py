@@ -470,3 +470,11 @@ def imagesearch_api(image_path,text, threshold, startIndex, limit, dbName, sourc
         except Exception as e:
             return {'error': f'Error in image search: {str(e)}'}, 500
 
+
+def get_transcripts(sourceId, db_name=None):
+    db_manager = get_db_manager()
+    try:
+        transcripts = db_manager.get_transcripts_by_source_id(sourceId, db_name)
+        return transcripts, 200
+    except Exception as e:
+        return {'error': f'Error retrieving transcripts: {str(e)}'}, 500

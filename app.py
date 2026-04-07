@@ -110,6 +110,7 @@ def textsearch():
     db_name = data.get("dbName", "*")
     source_ids = data.get("sourceIds", None)
     index_type = data.get("indexType", "video")
+    rerank = False
     search_res, status_code = search_api(query, 0, start_index, limit, rerank, db_name, source_ids, index_type)
     return jsonify(search_res), status_code
 

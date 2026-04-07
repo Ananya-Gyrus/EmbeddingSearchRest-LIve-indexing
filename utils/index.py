@@ -465,9 +465,11 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
                 start = i * chunk_duration
                 out_chunk = os.path.join(temp_dir, f"chunk_{i:04d}.wav")
                 split_cmd = [
-                    "ffmpeg", "-y", "-i", audio_file,
+                    "ffmpeg", "-y",
+                    "-i", audio_file,
                     "-ss", str(start), "-t", str(chunk_duration),
-                    "-acodec", "copy", out_chunk
+                    "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                    out_chunk
                 ]
                 subprocess.run(split_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 if os.path.exists(out_chunk):
@@ -942,13 +944,13 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
             index_files = get_index_files(db_name)
         
             # Convert indices to CPU if needed
-            if torch.cuda.is_available():
-                video_index_cpu = faiss.index_gpu_to_cpu(index)
-            else:
-                video_index_cpu = index
+            # if torch.cuda.is_available():
+            #     video_index_cpu = faiss.index_gpu_to_cpu(index)
+            # else:
+            #     video_index_cpu = index
 
             # Save video embeddings
-            if not save_index(index_files['video'], video_index_cpu):
+            if not save_index(index_files['video'], index):
                 config.indexing_status['errors'].append("Failed to save video index")
                 
         except Exception as e:

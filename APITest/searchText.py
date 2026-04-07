@@ -13,8 +13,8 @@ search_payload = {
     "limit": 10,
     "rerank": True,
     # "dbName": "ei2",
-    "sourceIds" : ["cos", "tos"],
-    # "indexType": "text"
+    # "sourceIds" : ["cos", "tos"],
+    "indexType": "text"
 }
 startIndex = search_payload["startIndex"]
 search_resp = requests.post(search_url, json=search_payload)

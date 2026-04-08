@@ -39,7 +39,7 @@ def get_embedding_model(model_path="./checkpoints/models--Qwen--Qwen3-VL-Embeddi
             )
             print(f"Model loaded successfully on {device}")
         except Exception as e:
-            print(f"Error loading Model: {e}")
+            print(f"Error loading Model")
             qwen3vl_model = None
             device = None
     
@@ -126,7 +126,7 @@ def get_video_embedding(
         return embedding
     
     except Exception as e:
-        print(f"Error generating video embedding: {e}")
+        print(f"Error generating video embedding")
         import traceback
         traceback.print_exc()
         return None
@@ -163,7 +163,7 @@ def get_text_embedding(
         return embedding.cpu()[:,:4096]
     
     except Exception as e:
-        print(f"Error generating text embedding: {e}")
+        print(f"Error generating text embedding")
         import traceback
         traceback.print_exc()
         return None
@@ -205,7 +205,7 @@ def get_text_embedding_batch(
         return embeddings.cpu()[:,:4096]
     
     except Exception as e:
-        print(f"Error generating text embeddings: {e}")
+        print(f"Error generating text embeddings")
         import traceback
         traceback.print_exc()
         return None
@@ -252,9 +252,9 @@ def get_image_embedding(
         return embedding.cpu()[:,:4096]
     
     except Exception as e:
-        print(f"Error generating image embedding: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error generating image embedding")
+        # import traceback
+        # traceback.print_exc()
         return None
 
 from transformers import AutoProcessor, AutoModel
@@ -275,7 +275,7 @@ def get_reranker_model():
 
         return reranking_model, reranking_processor, device
     except Exception as e:
-        print(f"Error loading reranker model: {e}")
+        print(f"Error loading reranker model")
         return None, None, None
 
 
@@ -313,7 +313,7 @@ def rerank_videos_by_text(
         # print("Time taken for reranking:", t2 - t1)
         return probs[0].cpu().tolist()
     except Exception as e:
-        print(f"Error during reranking: {e}")
+        print(f"Error during reranking")
         import traceback
         traceback.print_exc()
         return None

@@ -145,7 +145,7 @@ class Qwen3VLReranker():
                 return_video_metadata=True
             )
         except Exception as e:
-            logger.error(f"Error in processing vision info: {e}")
+            logger.error(f"Error in processing vision info")
             images = None
             videos = None
             video_kwargs = {'do_sample_frames': False}

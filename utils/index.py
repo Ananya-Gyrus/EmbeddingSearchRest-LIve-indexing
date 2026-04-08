@@ -43,7 +43,7 @@ def find_scenes_from_images(image_folder: str, image_pattern: str, fps: float, t
         print(f"Successfully opened image sequence. Detected frame size: {video_stream.frame_size}, Duration: {video_stream.duration}")
 
     except Exception as e:
-        print(f"Error opening image sequence: {e}")
+        print(f"Error opening image sequence")
         print("Please ensure that:")
         print(f"1. The image folder '{image_folder}' exists and contains images.")
         print(f"2. The image_pattern '{image_pattern}' is correct (e.g., '%d.jpg' for 0.jpg, 1.jpg...).")
@@ -77,7 +77,7 @@ def find_scenes_from_images(image_folder: str, image_pattern: str, fps: float, t
         return scene_list_tc
 
     except Exception as e:
-        print(f"Error during scene detection: {e}")
+        print(f"Error during scene detection")
         return None
 
 
@@ -236,9 +236,9 @@ def detect_scenes(video_path, source_id, threshold, is_video=True, video_fps=30,
             return scene_list, video_fps
             
     except Exception as e:
-        print(f"Error detecting scenes in {video_path}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error detecting scenes in {video_path}")
+        # import traceback
+        # traceback.print_exc()
         return [], 0
 
 def sample_frames(video_path, source_id, start_sec, end_sec, num_frames, fps, is_video=True):
@@ -373,9 +373,9 @@ def preprocess_frames_for_batch(frames):
         return clip_tensor
 
     except Exception as e:
-        print(f"Error during frame preprocessing: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error during frame preprocessing")
+        # import traceback
+        # traceback.print_exc()
         return None
 
 def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, index, db_name):
@@ -400,7 +400,7 @@ def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, index,
         db_manager.insert_metadata_batch(clip_metadata_batch, db_name)
 
     except Exception as e:
-        print(f"Error processing batch: {e}")
+        print(f"Error processing batch")
 
 def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30):
     # Create debug directory structure
@@ -477,7 +477,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
 
             return audio_chunks, duration
         except Exception as e:
-            print(f"Error extracting audio chunks: {e}")
+            print(f"Error extracting audio chunks")
             return [], 0
         # Note: temp_dir will be cleaned up by the caller if needed
     # Example usage inside index_audio_and_text:
@@ -819,7 +819,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                         vidReader = VideoReader(video_path, ctx=cpu(0), num_threads=1)
                         frames = sample_frames(video_path, source_id, start_sec, end_sec, config.FRAMES_PER_CLIP_FOR_EMBEDDING, video_frame_rate, is_video)
                     else:
-                        config.indexing_status['errors'].append(f"Error processing scene {i+1} in {video_filename}: {str(e)}")
+                        config.indexing_status['errors'].append(f"Error processing scene {i+1} in {video_filename}")
                         frames = []
                 if len(frames) != config.FRAMES_PER_CLIP_FOR_EMBEDDING:
                     if len(frames) > 0 and len(frames) < config.FRAMES_PER_CLIP_FOR_EMBEDDING:
@@ -903,7 +903,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                             config.indexing_status['errors'].append("Failed to save video index")
                         
                     except Exception as e:
-                        config.indexing_status['errors'].append(f"Failed to save FAISS index and metadata: {str(e)}")
+                        config.indexing_status['errors'].append(f"Failed to save FAISS index and metadata")
                     
                     # Increment scenes_processed by the number of scenes in this batch
                     current_clip_tensor_batch = []
@@ -911,7 +911,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                     new_usage_hours = 0.0
 
             except Exception as e:
-                config.indexing_status['errors'].append(f"Error processing scene {i+1} in {video_filename}: {str(e)}")
+                config.indexing_status['errors'].append(f"Error processing scene {i+1} in {video_filename}")
                 # If a scene fails, do not increment scenes_processed
         
         config.indexing_status['processed_videos'] += 1
@@ -954,7 +954,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 config.indexing_status['errors'].append("Failed to save video index")
                 
         except Exception as e:
-            config.indexing_status['errors'].append(f"Failed to save indices: {str(e)}") 
+            config.indexing_status['errors'].append(f"Failed to save indices") 
     
     # del model
     if torch.cuda.is_available():
@@ -1007,7 +1007,7 @@ def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video,
                 try:
                     video_paths.append(src_path)
                 except Exception as e:
-                    return {'error': f'Error copying file {secure_name}: {str(e)}'}, 500
+                    return {'error': f'Error copying file {secure_name}'}, 500
             else:
                 return {'error': f'File not found: {secure_name}'}, 404
         threading.Thread(target=run_indexing_process, 

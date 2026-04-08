@@ -25,8 +25,8 @@ def parse_directories():
     parser.add_argument("-b", "--batch_size",type=int, dest="batch_size", default=6,
                         help=f"Batch size for indexation (default: 6)")
 
-    parser.add_argument("-p", "--port", type=int, dest="port", default=5801,
-                        help="Port to run the Flask app on (default: 5801)")
+    parser.add_argument("-p", "--port", type=int, dest="port", default=5800,
+                        help="Port to run the Flask app on (default: 5800)")
 
     parser.add_argument("-db", "--database_url", type=str, dest="database_url", required=True,
                         help="Database connection URL")
@@ -103,7 +103,7 @@ def get_status_rest():
 def textsearch():
     data = request.get_json()
     query = data.get("query")
-    start_index = data.get("startIndex")
+    start_index = data.get("startIndex", 1)
     sort_by = data.get("sortBy", "relevance")
     limit = data.get("limit", 20)
     rerank = data.get("rerank", False)
@@ -119,7 +119,7 @@ def imagesearch():
     data = request.get_json()
     image_path = data.get("image_path")
     text = data.get("text", "")
-    start_index = data.get("startIndex")
+    start_index = data.get("startIndex", 1)
     sort_by = data.get("sortBy", "relevance")
     limit = data.get("limit", 20)
     db_name = data.get("dbName", "*")
@@ -162,6 +162,29 @@ def get_transcripts_rest():
     db_name = data.get("dbName", None)
     transcripts, status_code = get_transcripts(source_id, db_name)
     return jsonify({"transcripts": transcripts}), status_code
+
+@app.route('/bulk-search', methods=['POST'])
+def bulk_search_rest():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    # print("Received data for bulk search:", data)
+    queries = data.get("queries", [])
+    start_index = data.get("startIndex", 1)
+    limit = data.get("limit", 20)
+    db_name = data.get("dbName", "*")
+    source_ids = data.get("sourceIds", None)
+    index_type = data.get("indexType", "video")
+    search_results = []
+    for query in queries:
+        # print(f"Processing query: {query}")
+        res, status_code = search_api(query, 0, start_index, limit, False, db_name, source_ids, index_type)
+        # print(f"Search API response for query '{query}': {res}")
+        if "error" in res:
+            search_results.append({"query": query, "error": res["error"]})
+        else:
+            search_results.append(res)
+    return jsonify({"searchResults": search_results}), 200
 
 
 if __name__ == '__main__':

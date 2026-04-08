@@ -98,5 +98,5 @@ def remove_video(sourceId, db_name, index_type='both'):
         }, 200
         
     except Exception as e:
-        return {'error': f'Error removing video: {str(e)}'}, 500 
+        return {'error': f'Error removing video'}, 500 
     

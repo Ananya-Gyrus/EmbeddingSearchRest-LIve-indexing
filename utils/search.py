@@ -27,7 +27,7 @@ def get_faiss_data(dbName, index_type):
             print(f"FAISS index file not found: {file_path}")
             return [{'index': None, 'metadata': None}, None]
     except Exception as e:
-        print(f"Error loading FAISS data from {file_path}: {e}")
+        print(f"Error loading FAISS data from {file_path}")
         return [{'index': None, 'metadata': None}, None]
 
 
@@ -65,7 +65,7 @@ def fetch_images_from_results(results, num_frames=8):
                     images.append(image)
                 vidcap.release()
             except Exception as e:
-                print(f"Error fetching image from {video_path}: {e}")
+                print(f"Error fetching image from {video_path}")
                 images.append(None)
         else:
             print(f"Video file not found for image extraction: {video_path}")
@@ -241,7 +241,7 @@ def search_api(query, threshold, startIndex, limit, rerank, dbName, sourceIds=No
                             })
                             existing_scenes.append(metadata_item['embedding_filename'])
             except Exception as e:
-                print(f'Error searching with FAISS: {str(e)}')
+                print(f'Error searching with FAISS')
     elif index_type == 'text':
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         db_names = all_db_names if dbName == "*" else [dbName]
@@ -281,7 +281,7 @@ def search_api(query, threshold, startIndex, limit, rerank, dbName, sourceIds=No
                             })
                             existing_scenes.append(metadata_item['embedding_filename'])
             except Exception as e:
-                print(f'Error searching with FAISS: {str(e)}')
+                print(f'Error searching with FAISS')
 
     config.prevResults = copy.deepcopy(results)
     prevDbName = dbName
@@ -397,7 +397,7 @@ def imagesearch_api(image_path,text, threshold, startIndex, limit, dbName, sourc
                 if query_embedding is None:
                     return {'error': 'Failed to generate query embedding'}, 500
             except Exception as e:
-                return {'error': f'Error generating query embedding: {str(e)}'}, 500
+                return {'error': f'Error generating query embedding'}, 500
             query_embedding_np = query_embedding.to(torch.float32).cpu().numpy()
             faiss.normalize_L2(query_embedding_np)
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -468,7 +468,7 @@ def imagesearch_api(image_path,text, threshold, startIndex, limit, dbName, sourc
                 'search_time': search_time
             }, 200
         except Exception as e:
-            return {'error': f'Error in image search: {str(e)}'}, 500
+            return {'error': f'Error in image search'}, 500
 
 
 def get_transcripts(sourceId, db_name=None):
@@ -477,4 +477,4 @@ def get_transcripts(sourceId, db_name=None):
         transcripts = db_manager.get_transcripts_by_source_id(sourceId, db_name)
         return transcripts, 200
     except Exception as e:
-        return {'error': f'Error retrieving transcripts: {str(e)}'}, 500
+        return {'error': f'Error retrieving transcripts'}, 500

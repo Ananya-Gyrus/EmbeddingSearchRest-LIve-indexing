@@ -31,7 +31,7 @@ def load_index(index_path, embedding_dim=config.embedding_dimension):  #used in 
         try:
             index = faiss.read_index(index_path)
         except Exception as e:
-            print(f"Failed to load existing FAISS index from {index_path}: {e}")
+            print(f"Failed to load existing FAISS index from {index_path}")
             index = faiss.IndexIDMap(faiss.IndexFlatIP(embedding_dim))
     else:
         index = faiss.IndexIDMap(faiss.IndexFlatIP(embedding_dim))
@@ -44,7 +44,7 @@ def save_index(index_path, index):  #used in index and remove
         faiss.write_index(index, index_path)
         return True
     except Exception as e:
-        print(f"Failed to save FAISS index to {index_path}: {e}")
+        print(f"Failed to save FAISS index to {index_path}")
         return False
 
 def initialize_config(app):  #used in app

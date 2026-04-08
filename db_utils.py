@@ -60,7 +60,7 @@ class DatabaseManager:
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             print("Database initialized successfully")
         except Exception as e:
-            print(f"Error initializing database: {e}")
+            print(f"Error initializing database")
             # Fallback to SQLite for development
             sqlite_url = f"sqlite:///{config.WORKING_DIR}/video_search.db"
             self.database_url = sqlite_url
@@ -114,7 +114,7 @@ class DatabaseManager:
             # print(f"Successfully inserted {len(metadata_list)} metadata records")
         except Exception as e:
             session.rollback()
-            print(f"Error inserting metadata batch: {e}")
+            print(f"Error inserting metadata batch")
             raise
         finally:
             session.close()
@@ -136,7 +136,7 @@ class DatabaseManager:
     #         metadata_records = query.all()
     #         return [self._metadata_to_dict(record) for record in metadata_records]
     #     except Exception as e:
-    #         print(f"Error retrieving metadata: {e}")
+    #         print(f"Error retrieving metadata")
     #         return []
     #     finally:
     #         session.close()
@@ -158,7 +158,7 @@ class DatabaseManager:
             metadata_records = query.all()
             return {record.faiss_id: self._metadata_to_dict(record) for record in metadata_records}
         except Exception as e:
-            print(f"Error retrieving metadata: {e}")
+            print(f"Error retrieving metadata")
             return {}
         finally:
             session.close()
@@ -173,7 +173,7 @@ class DatabaseManager:
     #         metadata_records = query.all()
     #         return [self._metadata_to_dict(record) for record in metadata_records]
     #     except Exception as e:
-    #         print(f"Error retrieving metadata by source_id: {e}")
+    #         print(f"Error retrieving metadata by source_id")
     #         return []
     #     finally:
     #         session.close()
@@ -190,7 +190,7 @@ class DatabaseManager:
             faiss_ids = query.all()
             return [faiss_id[0] for faiss_id in faiss_ids]
         except Exception as e:
-            print(f"Error retrieving faiss_ids by source_id: {e}")
+            print(f"Error retrieving faiss_ids by source_id")
             return []
         finally:
             session.close()
@@ -233,7 +233,7 @@ class DatabaseManager:
             
             return faiss_ids_dict
         except Exception as e:
-            print(f"Error retrieving faiss_ids by source_id: {e}")
+            print(f"Error retrieving faiss_ids by source_id")
             return {}
         finally:
             session.close()
@@ -248,7 +248,7 @@ class DatabaseManager:
             faiss_ids = query.all()
             return [faiss_id[0] for faiss_id in faiss_ids]
         except Exception as e:
-            print(f"Error retrieving faiss_ids of index: {e}")
+            print(f"Error retrieving faiss_ids of index")
             return []
         finally:
             session.close()
@@ -265,7 +265,7 @@ class DatabaseManager:
             metadata_records = query.all()
             return [self._metadata_to_dict(record) for record in metadata_records]
         except Exception as e:
-            print(f"Error retrieving metadata by source_id: {e}")
+            print(f"Error retrieving metadata by source_id")
             return []
         finally:
             session.close()
@@ -294,7 +294,7 @@ class DatabaseManager:
                 })
             return transcripts
         except Exception as e:
-            print(f"Error retrieving transcripts by source_id: {e}")
+            print(f"Error retrieving transcripts by source_id")
             return []
         finally:
             session.close()
@@ -308,7 +308,7 @@ class DatabaseManager:
     #         ).first()
     #         return self._metadata_to_dict(metadata_record) if metadata_record else None
     #     except Exception as e:
-    #         print(f"Error retrieving metadata by faiss_id: {e}")
+    #         print(f"Error retrieving metadata by faiss_id")
     #         return None
     #     finally:
     #         session.close()
@@ -334,7 +334,7 @@ class DatabaseManager:
                 'unique_files': unique_videos
             }
         except Exception as e:
-            print(f"Error getting video stats: {e}")
+            print(f"Error getting video stats")
             return {'total_entries': 0, 'unique_files': 0}
         finally:
             session.close()
@@ -346,7 +346,7 @@ class DatabaseManager:
             databases = session.query(VideoMetadata.database_name).distinct().all()
             return list(set(db[0] for db in databases if db[0]))
         except Exception as e:
-            print(f"Error getting database list: {e}")
+            print(f"Error getting database list")
             return []
         finally:
             session.close()
@@ -386,7 +386,7 @@ class DatabaseManager:
             return results
 
         except Exception as e:
-            print(f"Error getting indexed files by type: {e}")
+            print(f"Error getting indexed files by type")
             return {}
         finally:
             session.close()
@@ -401,7 +401,7 @@ class DatabaseManager:
             ).scalar()
             return max_chunk if max_chunk is not None else -1
         except Exception as e:
-            print(f"Error retrieving max chunk index: {e}")
+            print(f"Error retrieving max chunk index")
             return -1
         finally:
             session.close()
@@ -432,7 +432,7 @@ class DatabaseManager:
             return removed_count
         except Exception as e:
             session.rollback()
-            print(f"Error removing metadata by type: {e}")
+            print(f"Error removing metadata by type")
             return 0
         finally:
             session.close()

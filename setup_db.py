@@ -27,7 +27,7 @@ def setup_database():
         return True
         
     except Exception as e:
-        print(f"Error setting up database: {e}")
+        print(f"Error setting up database")
         print("\nPossible solutions:")
         print("1. Make sure PostgreSQL is running")
         print("2. Check your DATABASE_URL environment variable")

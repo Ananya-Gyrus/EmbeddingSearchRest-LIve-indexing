@@ -355,6 +355,9 @@ def imagesearch_api(image_path,text, threshold, startIndex, limit, dbName, sourc
     elif sourceIds is None or sourceIds == []:
         sourceIds = None  # Keep current logic
 
+    if text:
+        config.prevImageResults = None
+
     if prevImageQuery != image_path:
         prevImageQuery = image_path
     elif prevImageQuery == image_path and config.prevImageResults is not None and (startIndex+limit) <= len(config.prevImageResults) and prevImageDbName == dbName and prevImageSourceIds == sourceIds:

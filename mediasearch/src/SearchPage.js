@@ -268,8 +268,10 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
     dbName: '', 
     meta: {} 
   });
-  const [isDownloading, setIsDownloading] = useState(false); 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const videoRef = useRef(null);
+  const videoBlobUrlRef = useRef(null);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -382,7 +384,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
     if (file) { setSelectedImage(file); setImagePreview(URL.createObjectURL(file)); }
   };
 
-  const openPlayer = (r) => {
+  const openPlayer = async (r) => {
     const meta = r.metadata || {};
     const videoPath = meta.video_path_relative;
 
@@ -396,20 +398,44 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
     const dbName = meta.database || '';
     const title = meta.video_filename || 'Indexed Video';
 
+    // Revoke any previous blob URL
+    if (videoBlobUrlRef.current) {
+      URL.revokeObjectURL(videoBlobUrlRef.current);
+      videoBlobUrlRef.current = null;
+    }
+
     let clipUrl = '';
-    
+
     if (videoPath.startsWith('http')) {
       clipUrl = videoPath;
     } else {
       const cleanPath = videoPath.startsWith('/') ? videoPath.slice(1) : videoPath;
-      clipUrl = `${apiBase}/video/${encodeURIComponent(cleanPath)}?start=${start}&end=${end}&db=${encodeURIComponent(dbName)}`;
+      const endpoint = `${apiBase}/video/${cleanPath.split('/').map(encodeURIComponent).join('/')}`;
+      setIsLoadingVideo(true);
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start, end, db: dbName }),
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const blob = await response.blob();
+        clipUrl = URL.createObjectURL(blob);
+        videoBlobUrlRef.current = clipUrl;
+      } catch (err) {
+        console.error('Failed to load video clip:', err);
+        Swal.fire({ text: 'Failed to load video clip.', icon: 'error', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+        setIsLoadingVideo(false);
+        return;
+      }
+      setIsLoadingVideo(false);
     }
 
     setVideoModal({
-      open: true, 
-      url: clipUrl, 
+      open: true,
+      url: clipUrl,
       title: title,
-      startTime: start, 
+      startTime: start,
       endTime: end,
       dbName: dbName,
       meta: meta
@@ -427,6 +453,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
   const handleDownloadClip = async () => {
     setIsDownloading(true);
     try {
+      // videoModal.url is already a blob URL (or direct http URL); fetch it to get the blob
       const response = await fetch(videoModal.url);
       const blob = await response.blob();
       const suggestedFilename = `${videoModal.title}_clip_${videoModal.startTime}_${videoModal.endTime}.mp4`;
@@ -443,13 +470,11 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
         await writable.write(blob);
         await writable.close();
       } else {
-        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = videoModal.url;
         a.download = suggestedFilename;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       }
     } catch (err) {
@@ -460,6 +485,14 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const handleCloseVideoModal = () => {
+    if (videoBlobUrlRef.current) {
+      URL.revokeObjectURL(videoBlobUrlRef.current);
+      videoBlobUrlRef.current = null;
+    }
+    setVideoModal({ open: false, url: '', title: '', startTime: 0, endTime: 0, dbName: '', meta: {} });
   };
 
   return (
@@ -686,7 +719,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
 
       {videoModal.open && ReactDOM.createPortal(
         <div
-          onClick={(e) => { if (e.target === e.currentTarget) setVideoModal({ ...videoModal, open: false }); }}
+          onClick={(e) => { if (e.target === e.currentTarget) handleCloseVideoModal(); }}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             zIndex: 99999,
@@ -710,7 +743,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
             <div className="cinematic-header" style={{ flexShrink: 0 }}>
               <div className="d-flex justify-content-between align-items-start mb-3">
                 <h4 className="modal-title fw-bolder text-truncate pe-3" style={{ color: 'var(--text-main)' }}>{videoModal.title}</h4>
-                <button type="button" className="btn-close shadow-none opacity-75" style={{ filter: 'var(--bs-btn-close-color)', flexShrink: 0 }} onClick={() => setVideoModal({ ...videoModal, open: false })}></button>
+                <button type="button" className="btn-close shadow-none opacity-75" style={{ filter: 'var(--bs-btn-close-color)', flexShrink: 0 }} onClick={handleCloseVideoModal}></button>
               </div>
               <div className="d-flex flex-wrap gap-3 small fw-medium align-items-center" style={{ color: 'var(--text-muted)' }}>
                 <span className="d-flex align-items-center gap-2 px-3 py-1 rounded-pill modal-detail-badge">

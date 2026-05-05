@@ -177,15 +177,17 @@ def list_indexed_videos():
     return jsonify({"videos": videos})
 
 
-@app.route('/video/<path:video_path>')
+@app.route('/video/<path:video_path>',methods = ['GET','POST'])
 def serve_video(video_path):
     """Serve a video clip between start and end timestamps"""
     # print(f"Request to serve video: {video_path} with args: {request.args}")
     try:
         # Get query parameters
-        start_time = float(request.args.get('start', 0))
-        end_time = float(request.args.get('end', 0))
-        db_name = request.args.get('db', '')
+        print(request.json)
+        start_time = float(request.json.get('start', 0)) if request.json else 0
+        end_time = float(request.json.get('end', 0)) if request.json else 0
+        db_name = request.json.get('db', '') if request.json else ''
+       
         # Construct the full video path
         full_video_path = os.path.join(working_dir, video_path)
         # print(f"Full video path: {full_video_path}, start_time: {start_time}, end_time: {end_time}, db_name: {db_name}")

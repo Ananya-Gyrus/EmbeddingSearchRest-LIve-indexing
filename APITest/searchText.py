@@ -2,19 +2,19 @@ import requests
 import json
 
 
-port_num = 5801
+port_num = 5800
 BASE_URL = f"http://127.0.0.1:{port_num}"
 
 search_url = f"{BASE_URL}/textsearch"
 search_payload = {
-    "query": "tears of steel",
+    "query": "Time flies",
     # "sortBy": "relevance",
-    # "startIndex": 1,
+    "startIndex": 1,
     "limit": 10,
     "rerank": True,
-    # "dbName": "ei2",
+    "dbName": "vllm",
     # "sourceIds" : ["cos", "tos"],
-    "indexType": "text"
+    # "indexType": "text"
 }
 
 search_resp = requests.post(search_url, json=search_payload)

@@ -280,16 +280,16 @@ def sample_frames(video_path, source_id, start_sec, end_sec, num_frames, fps, is
         MAX_IMG_DIM = 480
         resized_frames = []
         for np_frame in frames:
-            height, width = np_frame.shape[0], np_frame.shape[1]
+            # height, width = np_frame.shape[0], np_frame.shape[1]
             
-            if width > height:
-                new_width = MAX_IMG_DIM
-                new_height = int((MAX_IMG_DIM / width) * height)
-            else:
-                new_height = MAX_IMG_DIM
-                new_width = int((MAX_IMG_DIM / height) * width)
+            # if width > height:
+            #     new_width = MAX_IMG_DIM
+            #     new_height = int((MAX_IMG_DIM / width) * height)
+            # else:
+            #     new_height = MAX_IMG_DIM
+            #     new_width = int((MAX_IMG_DIM / height) * width)
             
-            resized_frame = Image.fromarray(np_frame).resize((new_width, new_height), Image.Resampling.LANCZOS)
+            resized_frame = Image.fromarray(np_frame) #.resize((new_width, new_height), Image.Resampling.LANCZOS)
             resized_frames.append(resized_frame)
         # print("Number of resized frames:", len(resized_frames), "shape:", resized_frames[0].size if resized_frames else "N/A")
         return resized_frames
@@ -325,14 +325,14 @@ def sample_frames(video_path, source_id, start_sec, end_sec, num_frames, fps, is
                 continue
 
             #resize 
-            width, height = frame.shape[1], frame.shape[0]
-            if width > height:
-                new_width = MAX_IMG_DIM
-                new_height = int((MAX_IMG_DIM / width) * height)
-            else:
-                new_height = MAX_IMG_DIM
-                new_width = int((MAX_IMG_DIM / height) * width)
-            frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((new_width, new_height), Image.Resampling.LANCZOS)
+            # width, height = frame.shape[1], frame.shape[0]
+            # if width > height:
+            #     new_width = MAX_IMG_DIM
+            #     new_height = int((MAX_IMG_DIM / width) * height)
+            # else:
+            #     new_height = MAX_IMG_DIM
+            #     new_width = int((MAX_IMG_DIM / height) * width)
+            frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) #.resize((new_width, new_height), Image.Resampling.LANCZOS)
                 
             resized_frames.append(frame)
             
@@ -494,7 +494,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     # Get database manager for metadata storage
     db_manager = get_db_manager()
 
-    text_model = whisper.load_model("turbo", download_root="checkpoints/whisper")
+    text_model = whisper.load_model("medium", download_root="checkpoints/whisper")
     text_index = load_index(index_files['text'])
     # print(f"Loaded text index with {text_index.ntotal} entries")
     if text_index is None:
@@ -529,6 +529,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
         if not audio_bytes:
             print(f"Skipping empty audio chunk: {audio_chunk_path}")
             continue
+        # TODO: add language as portuguese?
         text = text_model.transcribe(audio_chunk_path, word_timestamps=True)
         new_text =  text['text'] if isinstance(text, dict) and 'text' in text else text
         

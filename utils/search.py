@@ -390,10 +390,10 @@ def imagesearch_api(image_path,text, threshold, startIndex, limit, dbName, sourc
     # print("database name", dbName)
     if image_bytes:
         try:
-            img = Image.open(io.BytesIO(image_bytes))
-            img = img.convert("RGB")
+            # img = Image.open(io.BytesIO(image_bytes))
+            # img = img.convert("RGB")
             try:
-                query_embedding = get_image_embedding(img,text)
+                query_embedding = get_image_embedding(os.path.abspath(image_path), text)
                 if query_embedding is None:
                     return {'error': 'Failed to generate query embedding'}, 500
             except Exception as e:

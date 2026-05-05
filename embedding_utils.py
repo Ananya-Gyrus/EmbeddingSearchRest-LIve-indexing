@@ -12,12 +12,20 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
 from src.models.embedding import Qwen3VLEmbedder
+from vllm_infer import *
+import numpy as np
+import torch
+import torch.nn.functional as F
+from concurrent.futures import ThreadPoolExecutor 
+from vllm import LLM, SamplingParams
+import gc
 
 # Global model instances (singleton pattern)
 qwen3vl_model = None
 device = None
+NUM_FRAMES = 8
 
-def get_embedding_model(model_path="./checkpoints/models--Qwen--Qwen3-VL-Embedding-8B/snapshots/a12d6118f720ceb6d95f7d1cad4e8aeccddd9340"):
+def get_embedding_model(model_path="checkpoints/embedding_model/snapshots/a12d6118f720ceb6d95f7d1cad4e8aeccddd9340"):
     """
     Get the Model as a singleton
     
@@ -32,17 +40,24 @@ def get_embedding_model(model_path="./checkpoints/models--Qwen--Qwen3-VL-Embeddi
     if qwen3vl_model is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         try:
-            qwen3vl_model = Qwen3VLEmbedder(
-                model_name_or_path=model_path,
-                torch_dtype=torch.bfloat16,
-                attn_implementation="flash_attention_2"
+            qwen3vl_model = LLM(
+                model=model_path,
+                runner="pooling",
+                max_model_len=4096+(4096//2), 
+                dtype="bfloat16",
+                kv_cache_dtype="auto",
+                enforce_eager=False,
+                # distributed_executor_backend="mp",
+                gpu_memory_utilization=0.75,
+                # limit_mm_per_prompt={"video": 1},
+                max_num_seqs=4//2,
+                max_num_batched_tokens=4096+(4096//2),
             )
-            print(f"Model loaded successfully on {device}")
         except Exception as e:
             print(f"Error loading Model")
             qwen3vl_model = None
             device = None
-    
+
     return qwen3vl_model, device
 
 
@@ -74,159 +89,187 @@ def extract_frames(video_path: str, num_frames: int = 8) -> List[Image.Image]:
     return frames
 
 
+def prepare_vllm_inputs_worker(video_path, tokenizer, instruction: str = "Represent the user's input.") -> Dict[str, Any]:
+    """
+    Worker function to be run in threads. 
+    Handles the heavy lifting of video decoding and pixel processing.
+    """
+    try:
+        input_dict = {"video": video_path}
+        conversation = format_input_to_conversation(input_dict, instruction, FPS, MAX_FRAMES)
+        
+        # Apply chat template
+        prompt_text = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        
+        # Process pixels (CPU intensive)
+        images, video_inputs, video_kwargs = process_vision_info(
+            [conversation],
+            image_patch_size=16,
+            return_video_metadata=True,
+            return_video_kwargs=True,
+            
+        )
+        print("processed vision info")
+        multi_modal_data = {}
+        if video_inputs:
+            videos, video_metadata = zip(*video_inputs)
+            multi_modal_data["video"] = [(v, m) for v, m in zip(list(videos), list(video_metadata))]
+            print("len of videos:", len(videos))
+            print("videos[0] shape:", videos[0].shape)
+
+        return {
+            "prompt": prompt_text,
+            "multi_modal_data": multi_modal_data if multi_modal_data else None,
+            "mm_processor_kwargs": video_kwargs,
+            "status": "success"
+        }
+    except Exception as e:
+        return {"status": "failed"}
+
+
+def process_videos_batch(video_frames_list, llm, batch_size: int = 8):
+
+    embeddings = []
+    tokenizer = llm.get_tokenizer()
+
+    total_videos = len(video_frames_list)
+    
+    # We use a ThreadPool to fetch and process videos in parallel
+    # max_workers=4 is usually plenty for IO/Decoding without overwhelming RAM
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for batch_idx in range(0, total_videos, batch_size):
+            batch_end = min(batch_idx + batch_size, total_videos)
+            batch_video_frames = video_frames_list[batch_idx:batch_end]
+            # Parallel preparation
+            t_prep_start = time.perf_counter()
+            # map passes the video paths to the worker function
+            futures = [executor.submit(prepare_vllm_inputs_worker, frames, tokenizer) for frames in batch_video_frames]
+
+            batch_prompts = []
+            
+            for future in futures:
+                prep_res = future.result()
+                if prep_res["status"] == "success":
+                    input_data = {"prompt": prep_res["prompt"]}
+                    if prep_res["multi_modal_data"]:
+                        input_data["multi_modal_data"] = prep_res["multi_modal_data"]
+                    if prep_res["mm_processor_kwargs"]:
+                        input_data["mm_processor_kwargs"] = prep_res["mm_processor_kwargs"]
+                    
+                    batch_prompts.append(input_data)
+
+            # GPU Inference
+            if batch_prompts:
+                outputs = llm.embed(batch_prompts, use_tqdm=False)                
+                for i, output in enumerate(outputs):
+                    # v_name = os.path.basename(valid_metadata[i])
+                    emb = output.outputs.embedding
+                    vllm_emb = torch.tensor(emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+                    # normalize vllm_emb
+                    # vllm_emb = F.normalize(vllm_emb, p=2, dim=-1)
+                    embeddings.append(vllm_emb)
+
+            del batch_prompts
+            del futures
+            gc.collect()
+
+    return torch.cat(embeddings, dim=0)
+
 def get_video_embedding(
     video_frames_list = None,
     num_frames: int = 8,
     instruction: str = "Understand the content of the provided video."
 ) -> Optional[torch.Tensor]:
-    """
-    Generate embedding for a video using Qwen3VLEmbedder
-    
-    Args:
-        video_frames_list: List of list of PIL Image frames
-        num_frames: Number of frames (informational, frames should already be extracted)
-        instruction: Instruction text to guide embedding generation
-    
-    Returns:
-        Video embedding tensor or None on error
-    """
-    model, dev = get_embedding_model()
-    if model is None:
-        print("Error: Model is not loaded")
-        return None
-    
+
+    model, device = get_embedding_model()
+    print("len of input: ", len(video_frames_list))
     try:
-        if video_frames_list is None:
-            raise ValueError("video_frames_list must be provided")
-        
-        # print(f"{len(video_frames_list)} frames received for embedding")
+        embeddings = process_videos_batch(video_frames_list, model, len(video_frames_list))
+        print("len of embeddings: ", len(embeddings))
+        return embeddings
 
-        inputs = []
-        for frames in video_frames_list:
-            inputs.append({
-                "instruction": instruction,
-                "video": frames
-            })
-        embedding = model.process(inputs)
-        # all_embeddings = []
-        # for video_frames in video_frames_list:
-        #     inputs = [{
-        #         "instruction": instruction,
-        #         "video": video_frames  # Pass all frames as a list
-        #     }]
-        #     with torch.no_grad():
-        #         embedding = model.process(inputs)
-        #         all_embeddings.append(embedding.cpu())
-        #         del embedding
-        
-        # embedding = torch.vstack(all_embeddings)
-
-        torch.cuda.empty_cache()
-
-        return embedding
-    
     except Exception as e:
         print(f"Error generating video embedding")
-        import traceback
-        traceback.print_exc()
+        # import traceback
+        # traceback.print_exc()
         return None
 
 def get_text_embedding(
     text_query: str,
-    instruction: str = "Find the video snippet that corresponds to the given caption: "
+    instruction: str = "Represent the user's input."
 ) -> Optional[torch.Tensor]:
-    """
-    Generate embedding for a text query using Qwen3VLEmbedder
-    
-    Args:
-        text_query: Text string to embed
-        instruction: Instruction text to guide embedding generation
-    
-    Returns:
-        Text embedding tensor or None on error
-    """
-    model, dev = get_embedding_model()
-    if model is None:
-        print("Error: Model is not loaded")
-        return None
-    
+    model, device = get_embedding_model()
     try:
-        # Prepare input for text
-        inputs = [{
-            "text": text_query,
-            "instruction": instruction
-        }]
+        vllm_inputs = [prepare_vllm_inputs({"text": text_query}, model, instruction=instruction)]
+        llm_input = [{"prompt": inp["prompt"]} for inp in vllm_inputs]
+        outputs = model.embed(
+            llm_input,
+            use_tqdm=False,
+        )
+        raw_emb = outputs[0].outputs.embedding         
+        vllm_emb_last = torch.tensor(raw_emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+        # normalize vllm_emb_last
+        # vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
+        return vllm_emb_last
         
-        # Generate text embedding
-        embedding = model.process(inputs)
-        
-        return embedding.cpu()[:,:4096]
-    
-    except Exception as e:
-        print(f"Error generating text embedding")
-        import traceback
-        traceback.print_exc()
+    except:
+        print("Error generating text embedding")
         return None
-
 
 def get_text_embedding_batch(
     text_batch: List[str],
-    instruction: str = "Find the video snippet that corresponds to the given caption: ",
-    batch_size: int = 32
-) -> Optional[torch.Tensor]:
-    """
-    Generate embeddings for a batch of text queries using Qwen3VLEmbedder
+    instruction: str = "Represent the user's input.",
+    batch_size: int = 4
+) -> Optional[torch.Tensor]:    
     
-    Args:
-        text_batch: List of text strings to embed
-        instruction: Instruction text to guide embedding generation
-        batch_size: Batch size for processing (informational, handled internally)
-    
-    Returns:
-        Batch of text embedding tensors or None on error
-    """
-    model, dev = get_embedding_model()
-    if model is None:
-        print("Error: Model is not loaded")
-        return None
-    
-    try:
-        # Prepare inputs for batch of texts
-        inputs = []
-        for text in text_batch:
-            inputs.append({
-                "text": text,
-                "instruction": instruction
-            })
-        
-        # Generate text embeddings in batch
-        embeddings = model.process(inputs)
-        
-        return embeddings.cpu()[:,:4096]
-    
-    except Exception as e:
-        print(f"Error generating text embeddings")
-        import traceback
-        traceback.print_exc()
-        return None
+    model, device = get_embedding_model()
+    embeddings = []    
+    total_texts = len(text_batch)
+    # We use a ThreadPool to fetch and process videos in parallel
+    # max_workers=4 is usually plenty for IO/Decoding without overwhelming RAM
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for batch_idx in range(0, total_texts, batch_size):
+            batch_end = min(batch_idx + batch_size, total_texts)
+            batch_texts = text_batch[batch_idx:batch_end]
+            # Parallel preparation
+            # map passes the video paths to the worker function
+            futures = [executor.submit(prepare_vllm_inputs, {"text": text_query}, model, instruction=instruction) for text_query in batch_texts]
 
+            batch_prompts = []
+            
+            for future in futures:
+                prep_res = future.result()
+                if prep_res:
+                    input_data = {"prompt": prep_res["prompt"]}
+                    if prep_res.get("multi_modal_data"):
+                        input_data["multi_modal_data"] = prep_res["multi_modal_data"]
+                    if prep_res.get("mm_processor_kwargs"):
+                        input_data["mm_processor_kwargs"] = prep_res["mm_processor_kwargs"]
+                    
+                    batch_prompts.append(input_data)
+
+            # GPU Inference
+            if batch_prompts:
+                outputs = model.embed(batch_prompts, use_tqdm=False)                
+                for i, output in enumerate(outputs):
+                    # v_name = os.path.basename(valid_metadata[i])
+                    emb = output.outputs.embedding
+                    vllm_emb = torch.tensor(emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+                    # normalize vllm_emb
+                    # vllm_emb = F.normalize(vllm_emb, p=2, dim=-1)
+                    embeddings.append(vllm_emb)
+
+            del batch_prompts
+            del futures
+            gc.collect()
+
+    return torch.cat(embeddings, dim=0)
 
 def get_image_embedding(
-    image: Union[str, Image.Image],
+    img_path: str,
     text: str = "",
     instruction: str = "Represent the given input."
 ) -> Optional[torch.Tensor]:
-    """
-    Generate embedding for a single image using Qwen3VLEmbedder
-    
-    Args:
-        image: PIL Image or path to image file
-        text: Optional text to accompany the image
-        instruction: Instruction text to guide embedding generation
-    
-    Returns:
-        Image embedding tensor or None on error
-    """
     model, dev = get_embedding_model()
     if model is None:
         print("Error: Model is not loaded")
@@ -234,22 +277,40 @@ def get_image_embedding(
     
     try:
         # Prepare input for image
-        if text:
-            inputs = [{
-                "image": image,
-                "text": text,
-                "instruction": instruction
-            }]
-        else:
-            inputs = [{
-                "image": image,
-                "instruction": instruction
-            }]
+        vllm_inputs = [prepare_vllm_inputs({"image": img_path, "text": text}, model, instruction=instruction)]
+
+        # Convert to TextPrompt format for vLLM
+        # vllm expects prompts to be strings or TextPrompt dictionaries
+        text_prompts = []
+        for inp in vllm_inputs:
+            text_prompt = {
+                "prompt": inp["prompt"],
+            }
+            
+            # Only add multi_modal_data if present
+            if inp.get("multi_modal_data"):
+                text_prompt["multi_modal_data"] = inp["multi_modal_data"]
+            
+            # Only add mm_processor_kwargs if present
+            if inp.get("video_kwargs"):
+                text_prompt["mm_processor_kwargs"] = inp["video_kwargs"]
+            
+            text_prompts.append(text_prompt)
+
+        # Call embed with TextPrompt format
+        outputs = model.embed(
+            text_prompts,
+            use_tqdm=False,
+        )
         
-        # Generate image embedding
-        embedding = model.process(inputs)
+        embedding = outputs[0].outputs.embedding      
+        # print("len of raw_emb: ", len(raw_emb))
+        # print("type of raw_emb[0]: ", type(raw_emb[0]))
+        vllm_emb_last = torch.tensor(embedding, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+        # normalize vllm_emb_last
+        # vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
         
-        return embedding.cpu()[:,:4096]
+        return vllm_emb_last.cpu()
     
     except Exception as e:
         print(f"Error generating image embedding")
@@ -314,8 +375,8 @@ def rerank_videos_by_text(
         return probs[0].cpu().tolist()
     except Exception as e:
         print(f"Error during reranking")
-        import traceback
-        traceback.print_exc()
+        # import traceback
+        # traceback.print_exc()
         return None
 
 

@@ -9,3 +9,8 @@ __pycache__/
 .venv/
 checkpoints/
 node_modules/
+work_dir*
+new_dir/
+*.tar
+ubuntu*
+mediasearch/

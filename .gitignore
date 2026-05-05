@@ -11,6 +11,8 @@ checkpoints/
 node_modules/
 work_dir*
 new_dir/
+<<<<<<< HEAD
 *.tar
 ubuntu*
 mediasearch/
+

@@ -9,9 +9,9 @@ import shutil
 import math
 import copy
 import whisper
-
+import gc
 from utils.base import *
-from embedding_utils import  get_video_embedding, get_text_embedding_batch
+from embedding_utils import  get_video_embedding, get_text_embedding_batch, get_embedding_model, get_image_embedding, get_text_embedding, flush_vllm_caches, get_audio_text_model
 
 from utils.licence import check_licence_validation, set_recent_date, get_recent_date, update_usage_hours
 from config import get_config
@@ -22,7 +22,7 @@ config = get_config()
 
 prevProcessedVideo = None
 vidReader = None
-
+text_model = None
 
 def find_scenes_from_images(image_folder: str, image_pattern: str, fps: float, threshold: float = 27.0):
     image_sequence_path = os.path.join(image_folder, image_pattern)
@@ -279,19 +279,11 @@ def sample_frames(video_path, source_id, start_sec, end_sec, num_frames, fps, is
         # print("shape of frames:", frames.shape)
         MAX_IMG_DIM = 480
         resized_frames = []
-        for np_frame in frames:
-            # height, width = np_frame.shape[0], np_frame.shape[1]
-            
-            # if width > height:
-            #     new_width = MAX_IMG_DIM
-            #     new_height = int((MAX_IMG_DIM / width) * height)
-            # else:
-            #     new_height = MAX_IMG_DIM
-            #     new_width = int((MAX_IMG_DIM / height) * width)
-            
+        for np_frame in frames:            
             resized_frame = Image.fromarray(np_frame) #.resize((new_width, new_height), Image.Resampling.LANCZOS)
             resized_frames.append(resized_frame)
         # print("Number of resized frames:", len(resized_frames), "shape:", resized_frames[0].size if resized_frames else "N/A")
+        del vidReader
         return resized_frames
     else:
         if not os.path.isdir(video_path):
@@ -384,15 +376,14 @@ def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, index,
 
     try:
         # clip_tensor_batch = torch.cat(clip_tensor_batch, dim=0)
-
         video_embedding = get_video_embedding(clip_tensor_batch, config.FRAMES_PER_CLIP_FOR_EMBEDDING)
-        embeddings_np = video_embedding.to(torch.float32).cpu().numpy()
+    
+        embeddings_np = video_embedding.numpy()
+        # print("Size of embeddings numpy array:", sys.getsizeof(embeddings_np) + embeddings_np.nbytes)
         current_idx = index.ntotal
-
         faiss.normalize_L2(embeddings_np)
         ids = np.arange(current_idx, current_idx + len(embeddings_np), dtype='int64')
         index.add_with_ids(embeddings_np, ids)
-
         db_manager = get_db_manager()
         for i, metadata in enumerate(clip_metadata_batch):
             metadata['faiss_id'] = current_idx + i
@@ -493,8 +484,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
 
     # Get database manager for metadata storage
     db_manager = get_db_manager()
-
-    text_model = whisper.load_model("medium", download_root="checkpoints/whisper")
+    text_model = get_audio_text_model()
     text_index = load_index(index_files['text'])
     # print(f"Loaded text index with {text_index.ntotal} entries")
     if text_index is None:
@@ -515,7 +505,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     config.indexing_status["overall_total_scenes"] += len(audio_chunks)
 
     max_chunk_indexed = db_manager.get_max_chunk_indexed(source_id, db_name)
-
+    
     for i, audio_chunk_path in enumerate(audio_chunks):
         # Check if chunk already exists in database
         
@@ -717,6 +707,12 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     return
+from embedding_utils import generate_video_from_frames
+
+def save_video(frames, video_frame_rate, scene_save_path):
+    # frames is a list of PIL images
+    saved_path = generate_video_from_frames(frames, video_frame_rate, scene_save_path)
+    return saved_path
 
 def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list, is_video=True, scene_frames=None, db_name= "_default_db"):
     global vidReader, prevProcessedVideo
@@ -907,8 +903,15 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                         
                     except Exception as e:
                         config.indexing_status['errors'].append(f"Failed to save FAISS index and metadata")
-                    
+                     # Explicitly close PIL images to release Pillow pixel buffers
+                    for frame_list in current_clip_tensor_batch:
+                        for img in frame_list:
+                            if hasattr(img, 'close'):
+                                img.close()
+                        frame_list.clear()
                     # Increment scenes_processed by the number of scenes in this batch
+                    current_clip_tensor_batch.clear()
+                    current_clip_metadata_batch.clear()
                     current_clip_tensor_batch = []
                     current_clip_metadata_batch = []
                     new_usage_hours = 0.0
@@ -958,10 +961,16 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 
         except Exception as e:
             config.indexing_status['errors'].append(f"Failed to save indices") 
-    
+        for frame_list in current_clip_tensor_batch:
+            for img in frame_list:
+                if hasattr(img, 'close'):
+                    img.close()
+            frame_list.clear()
     # del model
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    current_clip_tensor_batch.clear()
+    current_clip_metadata_batch.clear()
+    current_clip_tensor_batch = []
+    current_clip_metadata_batch = []
     # config.indexing_status['processed_videos'] += len(video_files)
     config.indexing_status['in_progress'] = False
     # total_hours_indexed = get_total_hours()
@@ -969,6 +978,15 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
     config.prevResults = None
     config.prevAudioResults = None
     config.prevImageResults = None
+    flush_vllm_caches()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        
+        # Run GC multiple times to ensure cleanup
+    gc.collect()
+    gc.collect()
+    del index
     print(f"Indexing completed, Given: {len(video_files)} videos, Successfully Indexed: {succesfully_indexed}, Time Elapsed: {time.time() - config.indexing_status['start_time']} seconds")
 
 def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video, scene_frames, db_name):

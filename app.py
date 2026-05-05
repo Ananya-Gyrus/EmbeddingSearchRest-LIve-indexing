@@ -43,6 +43,7 @@ from utils.status import get_status
 from utils.licence import check_licence_validation, create_licence_requirement, get_remaining_credit
 from utils.remove import remove_video
 from embedding_utils import get_embedding_model
+from utils.imageRegister import register_images_api, remove_registered_character, search_registered_api, get_registration_status
 from flask_cors import CORS
 import tempfile
 from werkzeug.utils import secure_filename, safe_join
@@ -182,10 +183,9 @@ def serve_video(video_path):
     """Serve a video clip between start and end timestamps"""
     # print(f"Request to serve video: {video_path} with args: {request.args}")
     try:
-        # Get query parameters
-        print(request.json)
-        start_time = float(request.json.get('start', 0)) if request.json else 0
-        end_time = float(request.json.get('end', 0)) if request.json else 0
+        # print(request.json)
+        start_time = float(request.json.get('start', 0) if request.json else 0)
+        end_time = float(request.json.get('end', 0) if request.json else 0)
         db_name = request.json.get('db', '') if request.json else ''
        
         # Construct the full video path
@@ -194,7 +194,7 @@ def serve_video(video_path):
         # Check if file exists
         if not os.path.exists(full_video_path):
             return Response(f"Video file not found: {full_video_path}", status=404)
-        print(f"Serving video: {full_video_path}, start_time: {start_time}, end_time: {end_time}")
+        # print(f"Serving video: {full_video_path}, start_time: {start_time}, end_time: {end_time}")
         if start_time == 0 or end_time == 0:
             #send whole video if start or end time is not provided
             return send_file(
@@ -223,12 +223,13 @@ def serve_video(video_path):
                 '-ss', str(start_time),
                 '-i', full_video_path,
                 '-t', str(duration),
-                '-c', 'copy',
-                '-avoid_negative_ts', 'make_zero',
-                '-y',  # Overwrite output file
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-preset', 'ultrafast',
+                '-y',
                 temp_file.name
             ]
-            print("Running ffmpeg command:", ' '.join(command))
+            # print("Running ffmpeg command:", ' '.join(command))
             # Run ffmpeg
             result = subprocess.run(
                 command,
@@ -236,7 +237,10 @@ def serve_video(video_path):
                 stderr=subprocess.PIPE,
                 timeout=30
             )
-            
+            # print("start time:", start_time)
+            # print("end time:", end_time)
+            # print("duration:", duration)
+
             if result.returncode != 0:
                 # If copy codec fails, try re-encoding
                 command = [
@@ -405,13 +409,13 @@ def get_status_rest():
 @app.route('/textsearch', methods=['POST'])
 def textsearch():
     data = request.get_json()
-    query = data.get("query")
+    query = data.get("query", "")
     start_index = data.get("startIndex", 1)
     limit = data.get("limit", 20)
     db_name = data.get("dbName", "*")
     source_ids = data.get("sourceIds", None)
     index_type = data.get("indexType", "video")
-    search_res, status_code = search_api(query, 0, start_index, limit, False, db_name, source_ids, index_type)
+    search_res, status_code = search_api(str(query), 0, start_index, limit, False, db_name, source_ids, index_type)
     return jsonify(search_res), status_code
 
 
@@ -464,6 +468,57 @@ def bulk_search_rest():
         else:
             search_results.append(res)
     return jsonify({"searchResults": search_results}), 200
+
+@app.route('/register-images', methods=['POST'])
+def register_images_rest():
+    data = request.get_json()
+    data_list = data.get("data", []) if data else []
+    status, status_code = register_images_api(data_list)
+    return jsonify(status), status_code
+
+@app.route('/remove-registered', methods=['POST'])
+def remove_registered_rest():
+    data = request.get_json()
+    name = data.get("name").strip() if data else None
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    # print(f"Received request to remove registered character: {name}")
+    name = name.strip().casefold()
+    status, status_code = remove_registered_character(name)
+    return jsonify(status), status_code
+
+@app.route('/search-registered', methods=['POST'])
+def search_registered_rest():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    character = data.get("character", "")
+    action = data.get("action", "")
+    threshold = data.get("threshold", 0)
+    start_index = data.get("startIndex", 1)
+    limit = data.get("limit", 20)
+    db_name = data.get("dbName", "*")
+    source_ids = data.get("sourceIds", None)
+    image_sim_threshold = data.get("imageSimThreshold", 0.3)
+    character_weight = data.get("characterWeight", 0.6)
+    search_res, status_code = search_registered_api(
+        character,
+        action,
+        threshold,
+        start_index,
+        limit,
+        db_name,
+        source_ids,
+        image_sim_threshold,
+        character_weight
+    )
+    return jsonify(search_res), status_code
+
+@app.route('/registration-status', methods=['GET'])
+def registration_status_rest():
+    status, status_code = get_registration_status()
+    return jsonify(status), status_code
+
 
 os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
 from embedding_utils import get_embedding_model

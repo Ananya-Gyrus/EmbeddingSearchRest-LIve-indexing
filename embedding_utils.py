@@ -76,7 +76,7 @@ def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d
 
     return qwen3vl_model, processor, device
 
-def get_audio_text_model(download_root="checkpoints/cache_dir/whisper"):
+def get_audio_text_model(download_root="checkpoints/whisper"):
     global text_model
     if text_model is None:
         text_model = whisper.load(whisper.load_model("medium", download_root=download_root))
@@ -204,7 +204,7 @@ def process_videos_batch(video_paths, llm, batch_size: int = 8):
         batch_end = min(batch_idx + batch_size, total_videos)
         batch_video_paths = video_paths[batch_idx:batch_end]
         
-        print(f"\n[Batch {batch_idx//batch_size + 1}] Preparing {len(batch_video_paths)} videos in parallel...")
+        # print(f"\n[Batch {batch_idx//batch_size + 1}] Preparing {len(batch_video_paths)} videos in parallel...")
         
         # Recreate ThreadPoolExecutor per batch so worker threads and their
         # memory (large pixel tensors from process_vision_info) are fully
@@ -301,12 +301,11 @@ def get_video_embedding(
     
     try:
         with vllm_inference_lock:
-            print("lock acquired")
+            #print("lock acquired")
             embeddings = process_videos_batch(video_frames_list, model, len(video_frames_list))
             # time.sleep(10)
         #print("len of embeddings: ", len(embeddings))
-        print("lock released")
-
+        #print("lock released")
         return embeddings
     
     except Exception as e:
@@ -355,7 +354,7 @@ def get_text_embedding(
     model, processor, device = get_embedding_model()
     try:
         with vllm_inference_lock:
-            print("lock acquired for text embedding")
+            #print("lock acquired for text embedding")
             vllm_inputs = [prepare_vllm_inputs({"text": text_query}, model, instruction=instruction)]
             llm_input = [{"prompt": inp["prompt"]} for inp in vllm_inputs]
             outputs = model.embed(
@@ -370,7 +369,7 @@ def get_text_embedding(
             # normalize vllm_emb_last
             vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
             del outputs
-        print("lock released for text embedding")
+        #print("lock released for text embedding")
         return vllm_emb_last
         
     except:
@@ -390,7 +389,7 @@ def get_text_embedding_batch(
 
     for batch_idx in range(0, total_texts, batch_size):
         with vllm_inference_lock:
-            print("acquired lock for text embedding batch")
+            #print("acquired lock for text embedding batch")
             batch_end = min(batch_idx + batch_size, total_texts)
             batch_texts = text_batch[batch_idx:batch_end]
 
@@ -440,7 +439,7 @@ def get_text_embedding_batch(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
-        print("lock released for text embedding batch")
+        #print("lock released for text embedding batch")
 
     return torch.cat(embeddings, dim=0)
 
@@ -519,6 +518,81 @@ def get_image_embedding(
         import traceback
         traceback.print_exc()
         return None
+
+def get_image_embedding_batch(
+    img_paths: List[str],
+    texts: List[str] = None,
+    instruction: str = "Represent the given input."
+) -> Optional[torch.Tensor]:
+    """
+    Generate embeddings for a batch of images using Qwen3VLEmbedder
+
+    Args:
+        img_paths: List of paths to image files
+        texts: Optional list of texts to accompany the images
+        instruction: Instruction text to guide embedding generation
+
+    Returns:
+        Batch of image embedding tensors or None on error
+    """
+    model, proc, dev = get_embedding_model()
+    if model is None:
+        print("Error: Model is not loaded")
+        return None
+
+    try:
+        with vllm_inference_lock:
+            # Prepare input for images
+            vllm_inputs = [prepare_vllm_inputs({"image": img_path, "text": text}, model, instruction=instruction)
+                           for img_path, text in zip(img_paths, texts if texts is not None else [""] * len(img_paths))]
+
+            # Convert to TextPrompt format for vLLM
+            text_prompts = []
+            for inp in vllm_inputs:
+                text_prompt = {
+                    "prompt": inp["prompt"],
+                }
+
+                # Only add multi_modal_data if present
+                if inp.get("multi_modal_data"):
+                    text_prompt["multi_modal_data"] = inp["multi_modal_data"]
+
+                # Only add mm_processor_kwargs if present
+                if inp.get("video_kwargs"):
+                    text_prompt["mm_processor_kwargs"] = inp["video_kwargs"]
+
+                text_prompts.append(text_prompt)
+
+            # Call embed with TextPrompt format
+            outputs = model.embed(
+                text_prompts,
+                use_tqdm=False,
+            )
+            embeddings = [torch.tensor(output.outputs.embedding, dtype=torch.float32).unsqueeze(0).cpu()
+                          for output in outputs]
+            # Normalize embeddings
+            embeddings = [F.normalize(emb, p=2, dim=-1) for emb in embeddings]
+            del outputs
+
+            # Clear the pixel tensors from the prepared prompt
+            for tp in text_prompts:
+                mm = tp.get("multi_modal_data")
+                if mm:
+                    for key in list(mm.keys()):
+                        del mm[key]
+                    mm.clear()
+            del text_prompts
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+        return torch.cat(embeddings, dim=0)
+
+    except Exception as e:
+        print(f"Error generating image embedding: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
 
 reranking_model = None
@@ -578,7 +652,6 @@ def rerank_videos_by_text(
         import traceback
         traceback.print_exc()
         return None
-
 
 
 if __name__ == '__main__':

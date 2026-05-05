@@ -8,3 +8,12 @@ docker export -o videosearchapi.tar videosearchapi
 sudo chown gyrus14:gyrus14 videosearchapi.tar 
 
 docker import videosearchapi.tar videosearchapi
+
+sudo docker run --gpus all --privileged  --add-host=host.docker.internal:host-gateway  -p 5800:5800   -v $(pwd)/new_dir:/work_dir embedding-rest-cloud-v1 WORKING_DIR=new_dir BATCH_SIZE=2 PORT=5800 DATABASE_URL=sqlite:///new_dir/video_search.db LICENSE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdXBlci1hY2Nlc3NvIiwiZXhwIjoxNzgwNzA0MDAwLCJtb250aGx5X2NyZWRpdHMiOjEwMDAuMCwiaWF0IjoxNzc1NzEzNzQ1fQ.CWqIvbaDiy0xzUi0kO6hXSeHVL4ZK4WgqP5DnCgUUKw"
+sudo docker run --gpus all --privileged --add-host=host.docker.internal:host-gateway -p 5800:5800 -v $(pwd)/new_dir:/work_dir embedding-rest-cloud-v1
+
+source .venv/bin/activate && WORKING_DIR=new_dir BATCH_SIZE=2 PORT=5800 DATABASE_URL=sqlite:///new_dir/video_search.db LICENSE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdXBlci1hY2Nlc3NvIiwiZXhwIjoxNzgwNzA0MDAwLCJtb250aGx5X2NyZWRpdHMiOjEwMDAuMCwiaWF0IjoxNzc1NzEzNzQ1fQ.CWqIvbaDiy0xzUi0kO6hXSeHVL4ZK4WgqP5DnCgUUKw" gunicorn --workers 1 --threads 4 --timeout 300 --bind 0.0.0.0:5800 app:wsgi_app
+
+
+docker command
+sudo docker run --shm-size=500m --gpus all --privileged  --add-host=host.docker.internal:host-gateway  -p 5800:5800   -v $(pwd)/work_dir_sa:/work_dir  -e BATCH_SIZE=6 -e DATABASE_URL=sqlite:///work_dir_sa/video_search.db -e LICENSE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdXBlci1hY2Nlc3NvIiwiZXhwIjoxNzgwNzA0MDAwLCJtb250aGx5X2NyZWRpdHMiOjEwMDAuMCwiaWF0IjoxNzc1NzEzNzQ1fQ.CWqIvbaDiy0xzUi0kO6hXSeHVL4ZK4WgqP5DnCgUUKw" embedding-search-sa-v1

@@ -77,6 +77,8 @@ class AppConfig:
 
         self.MONTHLY_RENEWAL_CREDITS = 0
         self.removal_in_progress = False
+        self.registration_in_progress = False
+        self.registration_errors = []
 
     
     def initialize_config(self, app):

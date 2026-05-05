@@ -159,7 +159,7 @@ const roundToDecimal = (num, places) => {
 };
 
 const LicenseManager = ({ onActivationSuccess }) => {
-  const [backendConfig, setBackendConfig] = useState({ host: '127.0.0.1', port: 5801 });
+  const [backendConfig, setBackendConfig] = useState({ host: '127.0.0.1', port: 5800 });
   const [status, setStatus] = useState('checking'); 
   const [inactiveReason, setInactiveReason] = useState('invalid or expired');
   const [credits, setCredits] = useState(0);

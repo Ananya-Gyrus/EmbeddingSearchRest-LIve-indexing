@@ -45,6 +45,17 @@ class VideoMetadata(Base):
         {'mysql_engine': 'InnoDB'}
     )
 
+class ImageMetadata(Base):
+    __tablename__ = 'image_metadata'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), index=True)
+    image_paths = Column(Text)  # JSON string of list of image paths
+    index = Column(Integer)  # Current index for processing
+    n_images = Column(Integer)  # Total number of images in the set
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class DatabaseManager:
     def __init__(self, database_url=None):
         self.database_url = database_url or config.DATABASE_URL
@@ -159,6 +170,32 @@ class DatabaseManager:
             return {record.faiss_id: self._metadata_to_dict(record) for record in metadata_records}
         except Exception as e:
             print(f"Error retrieving metadata")
+            return {}
+        finally:
+            session.close()
+
+    def get_metadata_by_database_faiss_ids_dict(self, database_name, faiss_ids, index_type=None):
+        """
+        Get metadata for a specific database and list of faiss_ids as a dictionary keyed by faiss_id
+        Args:
+            database_name: The name of the database to query
+            faiss_ids: List of faiss_ids to retrieve metadata for
+            index_type: Optional filter for embedding type ('video' or 'text')
+        Returns:
+            Dictionary of metadata dictionaries keyed by faiss_id
+        """
+        session = self.get_session()
+        try:
+            query = session.query(VideoMetadata).filter_by(database_name=database_name)
+            if index_type in ['video', 'text']:
+                query = query.filter_by(embedding_type=index_type)
+            if faiss_ids:
+                faiss_ids = [int(fid) for fid in faiss_ids]  # Ensure faiss_ids are integers
+                query = query.filter(VideoMetadata.faiss_id.in_(faiss_ids))
+            metadata_records = query.all()
+            return {record.faiss_id: self._metadata_to_dict(record) for record in metadata_records}
+        except Exception as e:
+            print(f"Error retrieving metadata: {e}")
             return {}
         finally:
             session.close()
@@ -436,6 +473,121 @@ class DatabaseManager:
             return 0
         finally:
             session.close()
+
+    def add_image_register_metadata(self, name, image_paths,index, n_images):
+        """Insert metadata for a set of images"""
+        session = self.get_session()
+        try:
+            image_metadata = ImageMetadata(
+                name=name,
+                image_paths=json.dumps(image_paths),
+                index=index,
+                n_images=n_images
+            )
+            session.add(image_metadata)
+            session.commit()
+            print(f"Successfully inserted image metadata for {name}")
+        except Exception as e:
+            session.rollback()
+            print(f"Error inserting image metadata: {e}")
+            raise
+        finally:
+            session.close()
+    
+    def update_image_register_metadata(self, name, image_paths, index, n_images):
+        """Update metadata for a set of images"""
+        session = self.get_session()
+        try:
+            metadata_record = session.query(ImageMetadata).filter_by(name=name).first()
+            if metadata_record:
+                metadata_record.image_paths = json.dumps(image_paths)
+                metadata_record.index = index
+                metadata_record.n_images = n_images
+                session.commit()
+                print(f"Successfully updated image metadata for {name}")
+            else:
+                print(f"No existing metadata found for {name}, inserting new record")
+                self.add_image_register_metadata(name, image_paths, index, n_images)
+        except Exception as e:
+            session.rollback()
+            print(f"Error updating image metadata: {e}")
+            raise
+        finally:
+            session.close()
+
+    def get_images_register_metadata(self):
+        """Get all metadata for registered images"""
+        session = self.get_session()
+        try:
+            metadata_records = session.query(ImageMetadata).all()
+            return {
+                record.name: {
+                    'name': record.name,
+                    'image_paths': json.loads(record.image_paths),
+                    'index': record.index,
+                    'n_images': record.n_images,
+                }
+                for record in metadata_records
+            }
+        except Exception as e:
+            print(f"Error retrieving image metadata: {e}")
+            return {}
+        finally:
+            session.close()
+
+    def get_image_register_metadata_by_name(self, name):
+        """Get metadata for a specific registered image set by name"""
+        session = self.get_session()
+        try:
+            record = session.query(ImageMetadata).filter_by(name=name).first()
+            if record:
+                return {
+                    'name': record.name,
+                    'image_paths': json.loads(record.image_paths),
+                    'index': record.index,
+                    'n_images': record.n_images,
+                }
+            else:
+                # print(f"No metadata found for {name}")
+                return None
+        except Exception as e:
+            print(f"Error retrieving image metadata: {e}")
+            return None
+        finally:
+            session.close()
+
+    def remove_image_register_metadata(self, name):
+        """Remove metadata for a registered image set"""
+        session = self.get_session()
+        try:
+            record = session.query(ImageMetadata).filter_by(name=name).first()
+            if record:
+                session.delete(record)
+                session.commit()
+                print(f"Successfully removed image metadata for {name}")
+                return True
+            else:
+                # print(f"No metadata found for {name} to remove")
+                return False
+        except Exception as e:
+            session.rollback()
+            print(f"Error removing image metadata: {e}")
+            raise
+        finally:
+            session.close()
+
+    def get_all_registered_character_names(self):
+        """Get a list of all registered character names"""
+        session = self.get_session()
+        try:
+            names = session.query(ImageMetadata.name).all()
+            return [name[0] for name in names]
+        except Exception as e:
+            print(f"Error retrieving registered character names: {e}")
+            return []
+        finally:
+            session.close()
+            
             
     def _metadata_to_dict(self, metadata_record):
         """Convert metadata record to dictionary"""

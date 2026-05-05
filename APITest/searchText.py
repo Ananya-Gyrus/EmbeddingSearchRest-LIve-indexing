@@ -7,13 +7,12 @@ BASE_URL = f"http://127.0.0.1:{port_num}"
 
 search_url = f"{BASE_URL}/textsearch"
 search_payload = {
-
     "query": "washing machines",
     # "sortBy": "relevance",
     "startIndex": 1,
     "limit": 10,
-    "dbName": "_default_db",
-    # "sourceIds" : ["mer_new2"],
+    # "dbName": "sa2",
+    "sourceIds" : ["cos","mer","wing"],
     #"indexType": "text"
 
 }

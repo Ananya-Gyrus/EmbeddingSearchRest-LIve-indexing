@@ -438,14 +438,14 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
                     shutil.copy(possible_audio, audio_file)
                 else:
                     # No audio found for image sequence
-                    return [], 0
+                    return [], 0 , temp_dir
                 cmd = None
 
             if is_video and cmd:
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
             if not os.path.exists(audio_file):
-                return [], 0
+                return [], 0, temp_dir
 
             # Step 2: Get audio duration
             probe_cmd = [
@@ -456,7 +456,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
             result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             duration_str = result.stdout.decode().strip()
             if not duration_str:
-                return [], 0
+                return [], 0, temp_dir
             duration = float(duration_str)
             num_chunks = math.ceil(duration / chunk_duration)
 
@@ -475,16 +475,16 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
                 if os.path.exists(out_chunk):
                     audio_chunks.append(out_chunk)
 
-            return audio_chunks, duration
+            return audio_chunks, duration, temp_dir
         except Exception as e:
             print(f"Error extracting audio chunks")
-            return [], 0
+            return [], 0, temp_dir
         # Note: temp_dir will be cleaned up by the caller if needed
     # Example usage inside index_audio_and_text:
     # Get total duration of the media
     chunk_duration = 30
     # total_duration = get_media_duration(video_path, is_video)
-    audio_chunks, total_duration = extract_audio_chunks(video_path, chunk_duration, is_video=is_video)
+    audio_chunks, total_duration, temp_dir = extract_audio_chunks(video_path, chunk_duration, is_video=is_video)
     print(f"Extracted {len(audio_chunks)} audio chunks from {video_path} (total duration: {total_duration:.2f}s)")
     AUDIO_BATCH_SIZE = config.BATCH_SIZE   # You can adjust this as needed
 
@@ -714,6 +714,8 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     with open(debug_transcript_path, 'w') as f:
         json.dump({f"{video_name}": aud_trans_debug}, f, indent=4)
     del text_model
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
     return
 
 def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list, is_video=True, scene_frames=None, db_name= "_default_db"):

@@ -19,7 +19,7 @@ def get_faiss_data(dbName, index_type):
     try:
         if os.path.exists(file_path):
             # Load FAISS index
-            index = faiss.read_index(file_path)
+            index = load_index(file_path)
             # Get metadata from PostgreSQL
             metadata = db_manager.get_metadata_by_database_dict(dbName,index_type)
             return [{'index': index, 'metadata': metadata}, os.path.basename(file_path)]

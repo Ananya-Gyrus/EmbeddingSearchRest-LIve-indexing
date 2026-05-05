@@ -8,12 +8,13 @@ BASE_URL = f"http://127.0.0.1:{port_num}"
 
 search_url = f"{BASE_URL}/imagesearch"
 search_payload = {
-    "image_path": "meridian_test_img.png",
+    "image_path": "sprite_char.png",
+    "text": "talking to a snail",
     "sortBy": "relevance",
     "startIndex": 1,
     "limit": 10,
-    # "dbName": "openmovies",
-    "sourceIds" : ["cos", "mer"]
+    "dbName": "time1",
+    "sourceIds": ["sprite8"]
 }
 search_resp = requests.post(search_url, json=search_payload)
 print("Search Images:", search_resp.json())

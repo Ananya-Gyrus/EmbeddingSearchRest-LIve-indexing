@@ -8,10 +8,8 @@ BASE_URL = f"http://127.0.0.1:{port_num}"
 
 get_transcripts_url = f"{BASE_URL}/get-transcripts"
 get_transcripts_payload = {
-
-    "sourceId": "mer",
-    "dbName": "sa1"
-
+    "sourceId": "mer3",
+    "dbName": "test1"
 }
 get_transcripts_resp = requests.post(get_transcripts_url, json=get_transcripts_payload)
 print("Get Transcripts:", get_transcripts_resp.json())

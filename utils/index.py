@@ -609,10 +609,10 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
                 "total_scenes": len(audio_chunks),
                 "start_frame": int(start_time * video_fps),
                 "end_frame": int(end_time * video_fps),
-                "start_time_sec": round(start_time, 3),  # Each chunk is 10 seconds, so start time is chunk index * 10
-                "end_time_sec": round(end_time, 3),  # Use actual duration for last chunk
+                "start_time_sec": float(round(start_time, 3)),  # Each chunk is 10 seconds, so start time is chunk index * 10
+                "end_time_sec": float(round(end_time, 3)),  # Use actual duration for last chunk
                 "text": sent,
-                "no_speech_prob": no_speech_probs[sent_num]
+                "no_speech_prob": float(no_speech_probs[sent_num])
             }
             text_clip_metadata_batch.append(curr_meta)
             aud_trans_debug.append(curr_meta)
@@ -669,12 +669,12 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
             "video_path_relative": os.path.relpath(video_path, os.path.dirname(config.OUTPUT_DIR)),
             "embedding_filename": f"{db_name}_{source_id}_chunk_{i:04d}.txt",
             "total_scenes": len(audio_chunks),
-            "start_time_sec": round(start_time, 3),  # Each chunk is 10 seconds, so start time is chunk index * 10
-            "end_time_sec": round(end_time, 3),  # Use actual duration for last chunk
+            "start_time_sec": float(round(start_time, 3)),  # Each chunk is 10 seconds, so start time is chunk index * 10
+            "end_time_sec": float(round(end_time, 3)),  # Use actual duration for last chunk
             "start_frame": int(start_time * video_fps),
             "end_frame": int(end_time * video_fps),
             "text": final_sent,
-            "no_speech_prob": no_speech_probs[-1] if no_speech_probs else 0
+            "no_speech_prob": float(no_speech_probs[-1]) if no_speech_probs else 0
         }
         text_clip_metadata_batch.append(curr_meta)
         aud_trans_debug.append(curr_meta)
@@ -847,9 +847,9 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                     "scene_index": scene_idx,
                     "start_frame": int(start_frame),
                     "end_frame": int(end_frame),
-                    "start_time_sec": round(start_sec, 3),
-                    "end_time_sec": round(end_sec, 3),
-                    "duration_sec": round(duration_sec, 3),
+                    "start_time_sec": float(round(start_sec, 3)),
+                    "end_time_sec": float(round(end_sec, 3)),
+                    "duration_sec": float(round(duration_sec, 3)),
                     "embedding_filename": embedding_filename,
                     "embedding_type": "video",
                 }

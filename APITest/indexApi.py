@@ -25,16 +25,16 @@ index_url = f"{BASE_URL}/index-videos"
 }"""
 index_payload = {
     "data": [
-         {"filepath": "WING.mp4", "sourceId": "wing2", "fps": 30, "useAudio": True},
-         #{"filepath": "tearsofsteel.mp4", "sourceId": "tos2", "fps": 30, "useAudio": True},
-        # {"filepath": "meridian.mp4", "sourceId": "mer2", "fps": 30, "useAudio": True},
-        # {"filepath": "CosmosLaundromat.mp4", "sourceId": "cos2", "fps": 30, "useAudio": True},
+        #{"filepath": "WING.mp4", "sourceId": "wing3", "fps": 30, "useAudio": True},
+        #  {"filepath": "tearsofsteel.mp4", "sourceId": "tos3", "fps": 30, "useAudio": True},
+        # {"filepath": "meridian.mp4", "sourceId": "mer3", "fps": 30, "useAudio": True},
+        {"filepath": "CosmosLaundromat.mp4", "sourceId": "cos3", "fps": 30, "useAudio": True},
          #{"filepath": "Spring.mp4", "sourceId": "spr", "fps": 30, "useAudio": True},
          #{"filepath": "Sprite.mp4", "sourceId": "ite", "fps": 30, "useAudio": True},
 
      ],
     "isVideo": True,
-    "dbName": "sa2"
+    "dbName": "lock"
 }
 
 index_resp = requests.post(index_url, json=index_payload)

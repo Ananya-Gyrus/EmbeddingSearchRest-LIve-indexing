@@ -75,7 +75,7 @@ def search_registered_api(character, action, threshold, startIndex, limit, dbNam
             faiss.normalize_L2(query_embedding_np)
     if query_idx is not None:
         if os.path.exists(os.path.join(config.WORKING_DIR, "database", "images_register.index")):
-            image_index = faiss.read_index(os.path.join(config.WORKING_DIR, "database", "images_register.index"))
+            image_index = load_index(os.path.join(config.WORKING_DIR, "database", "images_register.index"))
             index_map = faiss.vector_to_array(image_index.id_map)
             query_idx_internal = np.where(index_map == query_idx)[0]
             # print("Internal index found for query:", query, "internal index:", query_idx_internal)
@@ -272,7 +272,7 @@ def register_images(data_list):
     # 3. Initialize/Load FAISS Index
     d = 4096  # Ensure this matches your model output dimension
     if os.path.exists(index_file):
-        index = faiss.read_index(index_file)
+        index = load_index(index_file)
     else:
         index = faiss.IndexIDMap(faiss.IndexFlatIP(d))
     # 4. Generate Embeddings and Update Index
@@ -350,7 +350,7 @@ def register_images(data_list):
             )
 
     # 5. Save Changes
-    faiss.write_index(index, index_file)
+    save_index(index_file, index)
     # print(index.ntotal," entries in FAISS index after update")
     config.registration_in_progress = False
     return {'success': True, 'message': f'Updated {len(processed_items)} names in database'}, 200

@@ -12,7 +12,7 @@ import torchaudio
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-from src.models.qwen3_vl_embedding import Qwen3VLEmbedder
+from src.models.embedding import Qwen3VLEmbedder
 from vllm_infer import *
 import requests
 import base64
@@ -69,7 +69,7 @@ def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d
             )
             processor = AutoProcessor.from_pretrained(model_path)
         except Exception as e:
-            print(f"Error loading Model: {e}")
+            print(f"Error loading Model")
             qwen3vl_model = None
             device = None
             processor = None
@@ -78,7 +78,8 @@ def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d
 
 def get_audio_text_model(download_root="checkpoints/cache_dir/whisper"):
     global text_model
-    text_model = whisper.load(whisper.load_model("medium", download_root=download_root))
+    if text_model is None:
+        text_model = whisper.load(whisper.load_model("medium", download_root=download_root))
     return text_model
 
 def extract_frames(video_path: str, num_frames: int = 8) -> List[Image.Image]:
@@ -210,7 +211,8 @@ def process_videos_batch(video_paths, llm, batch_size: int = 8):
         # released when the context manager exits before inference starts.
         t_prep_start = time.perf_counter()
         prep_results = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        max_workers = min(4, len(batch_video_paths))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(prepare_vllm_inputs_worker, path, tokenizer) for path in batch_video_paths]
             for future in futures:
                 prep_results.append(future.result())
@@ -253,6 +255,11 @@ def process_videos_batch(video_paths, llm, batch_size: int = 8):
 
             # Explicitly drop outputs so vLLM's internal result objects are freed
             del outputs
+
+            try:
+                flush_vllm_caches()
+            except Exception:
+                pass
 
         # --- CRITICAL: Memory Management ---
         # Drop batch_prompts which hold large multi_modal_data pixel tensors
@@ -321,10 +328,8 @@ def flush_vllm_caches():
     if model is None:
         return
     try:
-
-        with vllm_inference_lock:
-            model.reset_mm_cache()
-            model.reset_prefix_cache()
+        model.reset_mm_cache()
+        model.reset_prefix_cache()
         # print("vLLM MM and prefix caches flushed.")
 
     except Exception as e:

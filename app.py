@@ -465,6 +465,11 @@ def bulk_search_rest():
             search_results.append(res)
     return jsonify({"searchResults": search_results}), 200
 
+os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+from embedding_utils import get_embedding_model
+model,_,_ = get_embedding_model()
+if model:
+    print("Embedding model loaded successfully.")
 
 if __name__ == '__main__':
     # Dev fallback only – use Gunicorn in production

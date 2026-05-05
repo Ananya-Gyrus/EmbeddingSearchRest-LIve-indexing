@@ -118,6 +118,7 @@ def search_api(query, threshold, startIndex, limit, rerank, dbName, sourceIds=No
     Args:
         index_type: One of 'video', 'audio', or 'text' to determine which index to search
     """
+    print("query, index_type:", query, index_type)
     global prevQuery, prevDbName, prevSourceIds, prevIndexType
     start_time = time.time()
     n_images = 4

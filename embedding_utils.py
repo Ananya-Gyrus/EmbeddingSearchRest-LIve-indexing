@@ -23,7 +23,8 @@ import decord
 import numpy as np
 import torch
 import torch.nn.functional as F
-from concurrent.futures import ThreadPoolExecutor 
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 # Global model instances (singleton pattern)
 qwen3vl_model = None
@@ -31,7 +32,14 @@ processor = None
 device = None
 NUM_FRAMES = 8
 
-def get_embedding_model(model_path="./checkpoints/models--Qwen--Qwen3-VL-Embedding-8B/snapshots/a12d6118f720ceb6d95f7d1cad4e8aeccddd9340"):
+
+# Mutex that serialises every call to model.embed() so that indexing and
+# search threads never call into vLLM concurrently (vLLM's LLM is not
+# thread-safe for concurrent embed() calls).
+vllm_inference_lock = threading.Lock()
+
+def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d6118f720ceb6d95f7d1cad4e8aeccddd9340"):
+
     """
     Get the Model as a singleton
     
@@ -281,12 +289,19 @@ def get_video_embedding(
 ) -> Optional[torch.Tensor]:
 
     model, processor, device = get_embedding_model()
-    print("len of input: ", len(video_frames_list))
-    try:
-        embeddings = process_videos_batch(video_frames_list, model, len(video_frames_list))
-        print("len of embeddings: ", len(embeddings))
-        return embeddings
 
+    #print("len of input: ", len(video_frames_list))
+    
+    try:
+        with vllm_inference_lock:
+            print("lock acquired")
+            embeddings = process_videos_batch(video_frames_list, model, len(video_frames_list))
+            # time.sleep(10)
+        #print("len of embeddings: ", len(embeddings))
+        print("lock released")
+
+        return embeddings
+    
     except Exception as e:
         print(f"Error generating video embedding: {e}")
         import traceback
@@ -306,9 +321,12 @@ def flush_vllm_caches():
     if model is None:
         return
     try:
-        model.reset_mm_cache()
-        model.reset_prefix_cache()
-        print("vLLM MM and prefix caches flushed.")
+
+        with vllm_inference_lock:
+            model.reset_mm_cache()
+            model.reset_prefix_cache()
+        # print("vLLM MM and prefix caches flushed.")
+
     except Exception as e:
         print(f"Warning: could not reset vLLM caches: {e}")
 
@@ -331,20 +349,23 @@ def get_text_embedding(
 ) -> Optional[torch.Tensor]:
     model, processor, device = get_embedding_model()
     try:
-        vllm_inputs = [prepare_vllm_inputs({"text": text_query}, model, instruction=instruction)]
-        llm_input = [{"prompt": inp["prompt"]} for inp in vllm_inputs]
-        outputs = model.embed(
-            llm_input,
-            use_tqdm=False,
-        )
-        print("len of outputs: ", len(outputs))
-        raw_emb = outputs[0].outputs.embedding         
-        print("len of raw_emb: ", len(raw_emb))
-        print("type of raw_emb[0]: ", type(raw_emb[0]))
-        vllm_emb_last = torch.tensor(raw_emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
-        # normalize vllm_emb_last
-        vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
-        del outputs
+        with vllm_inference_lock:
+            print("lock acquired for text embedding")
+            vllm_inputs = [prepare_vllm_inputs({"text": text_query}, model, instruction=instruction)]
+            llm_input = [{"prompt": inp["prompt"]} for inp in vllm_inputs]
+            outputs = model.embed(
+                llm_input,
+                use_tqdm=False,
+            )
+            #print("len of outputs: ", len(outputs))
+            raw_emb = outputs[0].outputs.embedding
+            #print("len of raw_emb: ", len(raw_emb))
+            #print("type of raw_emb[0]: ", type(raw_emb[0]))
+            vllm_emb_last = torch.tensor(raw_emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+            # normalize vllm_emb_last
+            vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
+            del outputs
+        print("lock released for text embedding")
         return vllm_emb_last
         
     except:
@@ -363,54 +384,58 @@ def get_text_embedding_batch(
     total_texts = len(text_batch)
 
     for batch_idx in range(0, total_texts, batch_size):
-        batch_end = min(batch_idx + batch_size, total_texts)
-        batch_texts = text_batch[batch_idx:batch_end]
+        with vllm_inference_lock:
+            print("acquired lock for text embedding batch")
+            batch_end = min(batch_idx + batch_size, total_texts)
+            batch_texts = text_batch[batch_idx:batch_end]
 
-        # Recreate executor per batch so threads and their memory are released
-        # before GPU inference runs.
-        prep_results = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(prepare_vllm_inputs, {"text": text_query}, model, instruction=instruction) for text_query in batch_texts]
-            for future in futures:
-                prep_results.append(future.result())
-        del futures
-        gc.collect()
+            # Recreate executor per batch so threads and their memory are released
+            # before GPU inference runs.
+            prep_results = []
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(prepare_vllm_inputs, {"text": text_query}, model, instruction=instruction) for text_query in batch_texts]
+                for future in futures:
+                    prep_results.append(future.result())
+            del futures
+            gc.collect()
 
-        batch_prompts = []
-        for prep_res in prep_results:
-            if prep_res:
-                input_data = {"prompt": prep_res["prompt"]}
-                if prep_res["multi_modal_data"]:
-                    input_data["multi_modal_data"] = prep_res["multi_modal_data"]
-                if prep_res["mm_processor_kwargs"]:
-                    input_data["mm_processor_kwargs"] = prep_res["mm_processor_kwargs"]
-                batch_prompts.append(input_data)
 
-        del prep_results
-        gc.collect()
+            batch_prompts = []
+            for prep_res in prep_results:
+                if prep_res:
+                    input_data = {"prompt": prep_res["prompt"]}
+                    # if prep_res["multi_modal_data"]:
+                    #     input_data["multi_modal_data"] = prep_res["multi_modal_data"]
+                    # if prep_res["mm_processor_kwargs"]:
+                    #     input_data["mm_processor_kwargs"] = prep_res["mm_processor_kwargs"]
+                    batch_prompts.append(input_data)
 
-        # GPU Inference
-        if batch_prompts:
-            outputs = model.embed(batch_prompts, use_tqdm=False)
-            for i, output in enumerate(outputs):
-                emb = output.outputs.embedding
-                vllm_emb = torch.tensor(emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
-                # normalize vllm_emb
-                # vllm_emb = F.normalize(vllm_emb, p=2, dim=-1)
-                embeddings.append(vllm_emb)
-            del outputs
+            del prep_results
+            gc.collect()
 
-        for prompt in batch_prompts:
-            mm = prompt.get("multi_modal_data")
-            if mm:
-                for key in list(mm.keys()):
-                    del mm[key]
-                mm.clear()
-        del batch_prompts
+            # GPU Inference
+            if batch_prompts:
+                outputs = model.embed(batch_prompts, use_tqdm=False)
+                for i, output in enumerate(outputs):
+                    emb = output.outputs.embedding
+                    vllm_emb = torch.tensor(emb, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+                    # normalize vllm_emb
+                    # vllm_emb = F.normalize(vllm_emb, p=2, dim=-1)
+                    embeddings.append(vllm_emb)
+                del outputs
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
+            for prompt in batch_prompts:
+                mm = prompt.get("multi_modal_data")
+                if mm:
+                    for key in list(mm.keys()):
+                        del mm[key]
+                    mm.clear()
+            del batch_prompts
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+        print("lock released for text embedding batch")
 
     return torch.cat(embeddings, dim=0)
 
@@ -438,49 +463,50 @@ def get_image_embedding(
         return None
     
     try:
-        # Prepare input for image
-        vllm_inputs = [prepare_vllm_inputs({"image": img_path, "text": text}, model, instruction=instruction)]
+        with vllm_inference_lock:
+            # Prepare input for image
+            vllm_inputs = [prepare_vllm_inputs({"image": img_path, "text": text}, model, instruction=instruction)]
 
-        # Convert to TextPrompt format for vLLM
-        # vllm expects prompts to be strings or TextPrompt dictionaries
-        text_prompts = []
-        for inp in vllm_inputs:
-            text_prompt = {
-                "prompt": inp["prompt"],
-            }
-            
-            # Only add multi_modal_data if present
-            if inp.get("multi_modal_data"):
-                text_prompt["multi_modal_data"] = inp["multi_modal_data"]
-            
-            # Only add mm_processor_kwargs if present
-            if inp.get("video_kwargs"):
-                text_prompt["mm_processor_kwargs"] = inp["video_kwargs"]
-            
-            text_prompts.append(text_prompt)
+            # Convert to TextPrompt format for vLLM
+            # vllm expects prompts to be strings or TextPrompt dictionaries
+            text_prompts = []
+            for inp in vllm_inputs:
+                text_prompt = {
+                    "prompt": inp["prompt"],
+                }
+                
+                # Only add multi_modal_data if present
+                if inp.get("multi_modal_data"):
+                    text_prompt["multi_modal_data"] = inp["multi_modal_data"]
+                
+                # Only add mm_processor_kwargs if present
+                if inp.get("video_kwargs"):
+                    text_prompt["mm_processor_kwargs"] = inp["video_kwargs"]
+                
+                text_prompts.append(text_prompt)
 
-        # Call embed with TextPrompt format
-        outputs = model.embed(
-            text_prompts,
-            use_tqdm=False,
-        )
-        
-        embedding = outputs[0].outputs.embedding      
-        vllm_emb_last = torch.tensor(embedding, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
-        # normalize vllm_emb_last
-        vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
-        del outputs
-        # Clear the pixel tensors from the prepared prompt
-        for tp in text_prompts:
-            mm = tp.get("multi_modal_data")
-            if mm:
-                for key in list(mm.keys()):
-                    del mm[key]
-                mm.clear()
-        del text_prompts
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
+            # Call embed with TextPrompt format
+            outputs = model.embed(
+                text_prompts,
+                use_tqdm=False,
+            )
+            embedding = outputs[0].outputs.embedding      
+            vllm_emb_last = torch.tensor(embedding, dtype=torch.float32).unsqueeze(0).cpu()   # (1, D)
+            # normalize vllm_emb_last
+            vllm_emb_last = F.normalize(vllm_emb_last, p=2, dim=-1)
+            del outputs
+            
+            # Clear the pixel tensors from the prepared prompt
+            for tp in text_prompts:
+                mm = tp.get("multi_modal_data")
+                if mm:
+                    for key in list(mm.keys()):
+                        del mm[key]
+                    mm.clear()
+            del text_prompts
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
         return vllm_emb_last.cpu()
     
     except Exception as e:

@@ -7,14 +7,15 @@ BASE_URL = f"http://127.0.0.1:{port_num}"
 
 search_url = f"{BASE_URL}/textsearch"
 search_payload = {
-    "query": "Time flies",
+
+    "query": "washing machines",
     # "sortBy": "relevance",
     "startIndex": 1,
     "limit": 10,
-    "rerank": True,
-    "dbName": "vllm",
-    # "sourceIds" : ["cos", "tos"],
-    # "indexType": "text"
+    "dbName": "_default_db",
+    # "sourceIds" : ["mer_new2"],
+    #"indexType": "text"
+
 }
 
 search_resp = requests.post(search_url, json=search_payload)

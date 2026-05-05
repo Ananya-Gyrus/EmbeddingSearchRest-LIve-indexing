@@ -146,7 +146,7 @@ def prepare_vllm_inputs_worker(video_path, tokenizer, instruction: str = "Repres
         image_patch_size=16,
         return_video_metadata=True,
         return_video_kwargs=True,
-        
+    )  
 
     # print("processed vision info")
     multi_modal_data = {}

@@ -34,7 +34,7 @@ for _noisy in (
 import datetime
 import sys
 sys.path.append('LanguageBind')
-from flask import Flask, jsonify, request, send_file, Response, current_app, abort
+from flask import Flask, jsonify, request, send_file, send_from_directory, Response, current_app, abort
 import argparse
 from utils.base import initialize_config, initialize_db_config
 from utils.index import index_videos
@@ -181,12 +181,12 @@ def list_indexed_videos():
 @app.route('/video/<path:video_path>',methods = ['GET','POST'])
 def serve_video(video_path):
     """Serve a video clip between start and end timestamps"""
-    # print(f"Request to serve video: {video_path} with args: {request.args}")
     try:
-        # print(request.json)
-        start_time = float(request.json.get('start', 0) if request.json else 0)
-        end_time = float(request.json.get('end', 0) if request.json else 0)
-        db_name = request.json.get('db', '') if request.json else ''
+        # Accept params from JSON body (POST) or query string (GET)
+        json_data = request.get_json(silent=True) or {}
+        start_time = float(json_data.get('start') or request.args.get('start', 0))
+        end_time   = float(json_data.get('end')   or request.args.get('end', 0))
+        db_name    = json_data.get('db')           or request.args.get('db', '')
        
         # Construct the full video path
         full_video_path = os.path.join(working_dir, video_path)
@@ -195,10 +195,10 @@ def serve_video(video_path):
         if not os.path.exists(full_video_path):
             return Response(f"Video file not found: {full_video_path}", status=404)
         # print(f"Serving video: {full_video_path}, start_time: {start_time}, end_time: {end_time}")
-        if start_time == 0 or end_time == 0:
+        if start_time == 0 and end_time == 0:
             #send whole video if start or end time is not provided
             return send_file(
-                "../"+full_video_path,
+                full_video_path,
                 mimetype='video/mp4',
                 as_attachment=False,
                 download_name=os.path.basename(full_video_path)
@@ -472,7 +472,12 @@ def bulk_search_rest():
 @app.route('/register-images', methods=['POST'])
 def register_images_rest():
     data = request.get_json()
-    data_list = data.get("data", []) if data else []
+    if isinstance(data, list):
+        data_list = data
+    elif isinstance(data, dict):
+        data_list = data.get("data", [])
+    else:
+        data_list = []
     status, status_code = register_images_api(data_list)
     return jsonify(status), status_code
 
@@ -518,6 +523,228 @@ def search_registered_rest():
 def registration_status_rest():
     status, status_code = get_registration_status()
     return jsonify(status), status_code
+
+@app.route('/registered_images/<path:filepath>')
+def serve_registered_image(filepath):
+    """Serve images from working_dir/registered_images/, regardless of working dir name."""
+    working_dir = app.config.get('WORKING_DIR', 'work_dir')
+    images_dir = os.path.abspath(os.path.join(working_dir, 'registered_images'))
+    return send_from_directory(images_dir, filepath)
+
+@app.route('/save_roi', methods=['POST'])
+def save_roi():
+    """Save ROI image to work_dir/registered_images/character_name/X.jpg"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        image_file = request.files['image']
+        character_name = request.form.get('character_name', 'unknown')
+        
+        # Secure the character name for folder
+        safe_character_name = character_name.strip().casefold()
+        if not safe_character_name:
+            safe_character_name = 'unknown'
+        
+        # Create character directory in work_dir/registered_images
+        work_dir = working_dir
+        images_dir = os.path.join(work_dir, 'registered_images')
+        character_dir = os.path.join(images_dir, safe_character_name)
+        os.makedirs(character_dir, exist_ok=True)
+        
+        # Find the next available number
+        existing_files = [f for f in os.listdir(character_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+        existing_numbers = []
+        for f in existing_files:
+            try:
+                num = int(os.path.splitext(f)[0])
+                existing_numbers.append(num)
+            except ValueError:
+                continue
+        
+        next_number = max(existing_numbers) + 1 if existing_numbers else 1
+        filename = f'{next_number}.jpg'
+        print(f"Saving ROI for character '{character_name}' as {filename} in {character_dir}")
+        
+        # Save the file
+        filepath = os.path.join(character_dir, filename)
+        image_file.save(filepath)
+        
+        # Return relative path
+        relative_path = os.path.join('registered_images', safe_character_name, filename)
+        
+        return jsonify({
+            'success': True,
+            'path': relative_path,
+            'filename': filename,
+            'character': safe_character_name,
+            'full_path': filepath
+        })
+        
+    except Exception as e:
+        print(f"Error saving ROI: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/get_registered_characters', methods=['GET'])
+def get_registered_characters():
+    """Get list of registered characters from work_dir/registered_images"""
+    try:
+        from PIL import Image
+        working_dir = app.config.get('WORKING_DIR', 'work_dir')
+        images_dir = os.path.join(working_dir, 'registered_images')
+        
+        if not os.path.exists(images_dir):
+            return jsonify({'characters': []})
+        db_manager = get_db_manager()
+        metadata_dict = db_manager.get_images_register_metadata()
+        characters = []
+        for character_name in os.listdir(images_dir):
+            if character_name not in metadata_dict:
+                continue
+            character_path = os.path.join(images_dir, character_name)
+            if os.path.isdir(character_path):
+                # Get all image files in the character directory
+                image_files = [f for f in os.listdir(character_path) 
+                              if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                
+                # Find image closest to square aspect ratio
+                preview_image = None
+                min_aspect_diff = float('inf')
+                
+                for img_file in image_files:
+                    try:
+                        img_path = os.path.join(character_path, img_file)
+                        with Image.open(img_path) as img:
+                            width, height = img.size
+                            aspect_ratio = width / height if height > 0 else 1
+                            aspect_diff = abs(aspect_ratio - 1.0)  # Difference from 1:1
+                            
+                            if aspect_diff < min_aspect_diff:
+                                min_aspect_diff = aspect_diff
+                                preview_image = img_file
+                    except Exception as e:
+                        print(f"Error processing image {img_file}: {e}")
+                        continue
+                
+                # Fallback to first image if none found
+                if not preview_image and image_files:
+                    preview_image = image_files[0]
+                
+                characters.append({
+                    'name': character_name,
+                    'count': len(image_files),
+                    'preview': f'/registered_images/{character_name}/{preview_image}' if preview_image else None
+                })
+        
+        # Sort by name
+        characters.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({'characters': characters})
+        
+    except Exception as e:
+        print(f"Error getting registered characters: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+
+@app.route('/get_saved_characters', methods=['GET'])
+def get_saved_characters():
+    """Get list of saved characters from work_dir/registered_images"""
+    try:
+        from PIL import Image
+        working_dir = app.config.get('WORKING_DIR', 'work_dir')
+        images_dir = os.path.join(working_dir, 'registered_images')
+        
+        if not os.path.exists(images_dir):
+            return jsonify({'characters': []})
+        db_manager = get_db_manager()
+        metadata_dict = db_manager.get_images_register_metadata()
+        characters = []
+        for character_name in os.listdir(images_dir):
+            character_path = os.path.join(images_dir, character_name)
+            if os.path.isdir(character_path):
+                # Get all image files in the character directory
+                image_files = [f for f in os.listdir(character_path) 
+                              if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                
+                # Find image closest to square aspect ratio
+                preview_image = None
+                min_aspect_diff = float('inf')
+
+                if len(image_files) == 0:
+                    continue
+                
+                for img_file in image_files:
+                    try:
+                        img_path = os.path.join(character_path, img_file)
+                        with Image.open(img_path) as img:
+                            width, height = img.size
+                            aspect_ratio = width / height if height > 0 else 1
+                            aspect_diff = abs(aspect_ratio - 1.0)  # Difference from 1:1
+                            
+                            if aspect_diff < min_aspect_diff:
+                                min_aspect_diff = aspect_diff
+                                preview_image = img_file
+                    except Exception as e:
+                        print(f"Error processing image {img_file}: {e}")
+                        continue
+                
+                # Fallback to first image if none found
+                if not preview_image and image_files:
+                    preview_image = image_files[0]
+                
+                characters.append({
+                    'name': character_name,
+                    'count': len(image_files),
+                    'preview': f'/registered_images/{character_name}/{preview_image}' if preview_image else None
+                })
+        
+        # Sort by name
+        characters.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({'characters': characters})
+        
+    except Exception as e:
+        print(f"Error getting registered characters: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/get_character_images/<character_name>', methods=['GET'])
+def get_character_images(character_name):
+    """Get all images for a specific character"""
+    try:
+        working_dir = app.config.get('WORKING_DIR', 'work_dir')
+        images_dir = os.path.join(working_dir, 'registered_images', character_name)
+        
+        if not os.path.exists(images_dir):
+            return jsonify({'error': 'Character not found'}), 404
+        
+        # Get all image files
+        image_files = [f for f in os.listdir(images_dir) 
+                      if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        
+        # Sort numerically
+        try:
+            image_files.sort(key=lambda x: int(os.path.splitext(x)[0]))
+        except ValueError:
+            image_files.sort()
+        
+        # Return paths using the dedicated /registered_images/ route
+        images = [f'/registered_images/{character_name}/{img}' for img in image_files]
+        
+        return jsonify({
+            'character': character_name,
+            'images': images
+        })
+        
+    except Exception as e:
+        print(f"Error getting character images: {e}")
+        return jsonify({'error': str(e)}), 500
+
+        
+    except Exception as e:
+        print(f"Error saving ROI: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'

@@ -283,7 +283,7 @@ def sample_frames(video_path, source_id, start_sec, end_sec, num_frames, fps, is
             resized_frame = Image.fromarray(np_frame) #.resize((new_width, new_height), Image.Resampling.LANCZOS)
             resized_frames.append(resized_frame)
         # print("Number of resized frames:", len(resized_frames), "shape:", resized_frames[0].size if resized_frames else "N/A")
-        del vidReader
+        # del vidReader
         return resized_frames
     else:
         if not os.path.isdir(video_path):
@@ -814,6 +814,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 try:
                     frames = sample_frames(video_path, source_id, start_sec, end_sec, config.FRAMES_PER_CLIP_FOR_EMBEDDING, video_frame_rate, is_video)
                 except Exception as e:
+                    print(f"Error sampling frames for {video_filename} (scene {scene_idx}): {e}")
                     if isinstance(e, DECORDError):
                         vidReader = VideoReader(video_path, ctx=cpu(0), num_threads=1)
                         frames = sample_frames(video_path, source_id, start_sec, end_sec, config.FRAMES_PER_CLIP_FOR_EMBEDDING, video_frame_rate, is_video)

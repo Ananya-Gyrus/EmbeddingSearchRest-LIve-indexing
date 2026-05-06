@@ -76,10 +76,12 @@ def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d
 
     return qwen3vl_model, processor, device
 
+text_model = None
+
 def get_audio_text_model(download_root="checkpoints/whisper"):
     global text_model
     if text_model is None:
-        text_model = whisper.load(whisper.load_model("medium", download_root=download_root))
+        text_model = whisper.load_model("medium", download_root=download_root)
     return text_model
 
 def extract_frames(video_path: str, num_frames: int = 8) -> List[Image.Image]:
@@ -514,9 +516,9 @@ def get_image_embedding(
         return vllm_emb_last.cpu()
     
     except Exception as e:
-        print(f"Error generating image embedding: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error generating image embedding")
+        # import traceback
+        # traceback.print_exc()
         return None
 
 def get_image_embedding_batch(

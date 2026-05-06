@@ -25,16 +25,15 @@ index_url = f"{BASE_URL}/index-videos"
 }"""
 index_payload = {
     "data": [
-        #{"filepath": "WING.mp4", "sourceId": "wing3", "fps": 30, "useAudio": True},
-        #  {"filepath": "tearsofsteel.mp4", "sourceId": "tos3", "fps": 30, "useAudio": True},
-        # {"filepath": "meridian.mp4", "sourceId": "mer3", "fps": 30, "useAudio": True},
-        {"filepath": "CosmosLaundromat.mp4", "sourceId": "cos3", "fps": 30, "useAudio": True},
-         #{"filepath": "Spring.mp4", "sourceId": "spr", "fps": 30, "useAudio": True},
-         #{"filepath": "Sprite.mp4", "sourceId": "ite", "fps": 30, "useAudio": True},
-
+        {"filepath": "uploads/WING.mp4", "sourceId": "wing", "fps": 30, "useAudio": True},
+        {"filepath": "uploads/tearsofsteel.mp4", "sourceId": "tos", "fps": 30, "useAudio": True},
+        {"filepath": "uploads/meridian.mp4", "sourceId": "mer", "fps": 30, "useAudio": True},
+        {"filepath": "uploads/CosmosLaundromat.mp4", "sourceId": "cos", "fps": 30, "useAudio": True},
+        {"filepath": "uploads/Spring.mp4", "sourceId": "spr", "fps": 30, "useAudio": True},
+        {"filepath": "uploads/Sprite.mp4", "sourceId": "sprite", "fps": 30, "useAudio": True},
      ],
     "isVideo": True,
-    "dbName": "lock"
+    "dbName": "_default_db"
 }
 
 index_resp = requests.post(index_url, json=index_payload)

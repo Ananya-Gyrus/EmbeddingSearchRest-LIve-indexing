@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { getApiBase } from './apiBase';
 import UploadPage from './UploadPage'; 
 import SearchPage from './SearchPage';
+import UploadRoiPage from './UploadRoiPage';
+import SearchRegisteredPage from './SearchRegisteredPage';
 import LibraryPage from './LibraryPage';
 import LicenseManager from './LicenseManager';
 
@@ -146,18 +148,19 @@ const modernStyles = `
   @media (max-width: 991px) { .mobile-header { display: flex; } }
 
   .nav-item-custom {
-    padding: 0.85rem 1.2rem;
-    border-radius: 12px;
-    margin-bottom: 0.5rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 10px;
+    margin-bottom: 0.25rem;
     color: var(--text-muted);
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.82rem;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 10px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
   }
+  .nav-item-custom i { font-size: 1rem; }
   .nav-item-custom:hover { background-color: var(--primary-light); color: var(--primary); }
   .nav-item-custom.active { background-color: var(--primary); color: white; box-shadow: 0 4px 15px var(--primary-light); }
 
@@ -281,7 +284,9 @@ const Sidebar = ({ activeTab, setActiveTab, licenseStatus, setShowSettings, isOp
   const tabs = [
     { name: 'Dashboard', icon: 'grid-1x2-fill' },
     { name: 'Upload & Index', icon: 'cloud-arrow-up-fill' },
+    { name: 'Register Characters', icon: 'person-video2' },
     { name: 'Search Media', icon: 'search' },
+    { name: 'Search Registered', icon: 'person-lines-fill', label: 'Character Search' },
     { name: 'Library', icon: 'collection-play-fill' },
     { name: 'LicenseManager', icon: 'shield-lock-fill', label: 'License Manager' }
   ];
@@ -307,7 +312,7 @@ const Sidebar = ({ activeTab, setActiveTab, licenseStatus, setShowSettings, isOp
               className={`nav-item-custom ${activeTab === tab.name ? 'active' : ''}`}
               onClick={() => { setActiveTab(tab.name); setIsOpen(false); }}
             >
-              <i className={`bi bi-${tab.icon} fs-5`}></i> 
+              <i className={`bi bi-${tab.icon}`}></i> 
               <span>{tab.label || tab.name}</span>
             </div>
           ))}
@@ -315,7 +320,7 @@ const Sidebar = ({ activeTab, setActiveTab, licenseStatus, setShowSettings, isOp
 
         <div className="mt-auto pt-4">
           <div className="nav-item-custom mb-4" onClick={() => { setShowSettings(true); setIsOpen(false); }}>
-            <i className="bi bi-gear-fill fs-5"></i>
+            <i className="bi bi-gear-fill"></i>
             <span>Settings</span>
           </div>
 
@@ -622,7 +627,9 @@ export default function App() {
         <main className="main-content flex-grow-1 p-4 p-md-5 w-100">
           {activeTab === 'Dashboard' && <DashboardView statusData={statusData} setActiveTab={setActiveTab} />}
           {activeTab === 'Upload & Index' && <div className="fade-in"><UploadPage backendConfig={backendConfig} mappings={mappings} setMappings={(newM) => saveSettings(backendConfig, newM)} setShowSettings={setShowSettings} /></div>}
+          {activeTab === 'Register Characters' && <div className="fade-in"><UploadRoiPage backendConfig={backendConfig} /></div>}
           {activeTab === 'Search Media' && <div className="fade-in"><SearchPage backendConfig={backendConfig} setShowSettings={setShowSettings} /></div>}
+          {activeTab === 'Search Registered' && <div className="fade-in"><SearchRegisteredPage backendConfig={backendConfig} /></div>}
           {activeTab === 'Library' && <div className="fade-in"><LibraryPage backendConfig={backendConfig} setShowSettings={setShowSettings} /></div>}
           {activeTab === 'LicenseManager' && <div className="fade-in"><LicenseManager onActivationSuccess={checkLicense} /></div>}
         </main>

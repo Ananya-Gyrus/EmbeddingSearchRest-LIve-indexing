@@ -284,7 +284,7 @@ def register_images(data_list):
         for p in item['new_paths']
     ]
         # Get embedding for the new batch of images
-        new_emb_tensor = get_image_embedding_batch(img_paths)
+        new_emb_tensor = get_image_embedding_batch(img_paths).mean(dim=0, keepdim=True)
         new_emb_np = new_emb_tensor.cpu().numpy().astype('float32')
        # print("Embedding shape:", new_emb_np.shape)
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { getApiBase } from './apiBase';
 
 const styles = `
@@ -69,14 +70,30 @@ const styles = `
 `;
 
 function Toast({ toasts }) {
-  return (
-    <div style={{ position:'fixed', top:20, right:20, zIndex:9999 }}>
+  if (toasts.length === 0) return null;
+  
+  return ReactDOM.createPortal(
+    <div style={{ position:'fixed', top:20, right:20, zIndex:99999, maxWidth: 400 }}>
       {toasts.map((t,i) => (
-        <div key={i} className={`alert alert-${t.type} alert-dismissible shadow`} style={{ minWidth:260, borderRadius:10, marginBottom:8 }}>
+        <div key={i} className={`alert alert-${t.type} shadow-lg`} style={{ 
+          minWidth:280, 
+          borderRadius:12, 
+          marginBottom:10,
+          animation: 'slideInRight 0.3s ease-out',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--border-color)'
+        }}>
           <strong>{t.title}</strong>: {t.message}
         </div>
       ))}
-    </div>
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+    </div>,
+    document.body
   );
 }
 
@@ -404,34 +421,64 @@ export default function UploadRoiPage({ backendConfig }) {
         </div>
       )}
 
-      {/* Character Images Modal */}
-      {charImagesModal.open && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered fade-in">
-            <div className="modal-content border-0" style={{ borderRadius: 20, background: 'var(--card-bg)' }}>
-              <div className="modal-header border-0" style={{ background: 'var(--primary)', borderRadius: '20px 20px 0 0' }}>
-                <h5 className="modal-title text-white fw-bold">
-                  <i className="bi bi-person me-2"></i>{charImagesModal.name}
+      {/* Character Images Modal - Portal */}
+      {charImagesModal.open && ReactDOM.createPortal(
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) setCharImagesModal({ open: false, name: '', images: [], loading: false }); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', padding: '1rem',
+          }}
+        >
+          <div style={{
+            width: '100%', maxWidth: '1100px', maxHeight: '95vh',
+            display: 'flex', flexDirection: 'column',
+            borderRadius: 24, overflow: 'hidden',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+            border: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-main)',
+          }}>
+            {/* Header */}
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', flexShrink: 0, background: 'var(--primary)' }}>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="fw-bolder mb-0 text-white">
+                  <i className="bi bi-person-circle me-2"></i>{charImagesModal.name}
                 </h5>
-                <button className="btn-close btn-close-white" onClick={() => setCharImagesModal({ open: false, name: '', images: [], loading: false })}></button>
+                <button className="btn-close btn-close-white shadow-none" onClick={() => setCharImagesModal({ open: false, name: '', images: [], loading: false })}></button>
               </div>
-              <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                {charImagesModal.loading
-                  ? <div className="text-center py-4"><div className="spinner-border text-primary"></div></div>
-                  : charImagesModal.images.length === 0
-                    ? <p className="text-muted text-center">No images found</p>
-                    : <div className="char-img-grid">
-                        {charImagesModal.images.map((img, idx) => (
-                          <div key={idx} className="char-img-item">
-                            <img src={img} alt={`${charImagesModal.name} ${idx + 1}`} />
-                            <span className="char-img-num">{idx + 1}</span>
-                          </div>
-                        ))}
-                      </div>}
-              </div>
+              <p className="mb-0 mt-2 small text-white opacity-75">
+                <i className="bi bi-images me-1"></i>
+                {charImagesModal.loading ? 'Loading...' : `${charImagesModal.images.length} saved image${charImagesModal.images.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.5rem', backgroundColor: 'var(--card-bg)' }}>
+              {charImagesModal.loading ? (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary" style={{ width: '3rem', height: '3rem' }}></div>
+                  <p className="mt-3 text-muted">Loading images...</p>
+                </div>
+              ) : charImagesModal.images.length === 0 ? (
+                <div className="text-center py-5 rounded-4" style={{ border: '2px dashed var(--border-color)', backgroundColor: 'var(--bg-main)' }}>
+                  <i className="bi bi-image fs-1 text-muted opacity-50"></i>
+                  <p className="mt-3 text-muted fw-medium">No images found for this character</p>
+                </div>
+              ) : (
+                <div className="char-img-grid">
+                  {charImagesModal.images.map((img, idx) => (
+                    <div key={idx} className="char-img-item">
+                      <img src={img} alt={`${charImagesModal.name} ${idx + 1}`} />
+                      <span className="char-img-num">{idx + 1}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

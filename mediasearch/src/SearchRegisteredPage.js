@@ -236,13 +236,27 @@ export default function SearchRegisteredPage({ backendConfig }) {
     <div className="container-fluid fade-in">
       <style>{styles}</style>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999 }}>
-          <div className={`alert alert-${toast.type} shadow`} style={{ minWidth: 260, borderRadius: 12, marginBottom: 8 }}>
+      {/* Toast - Portal to document.body */}
+      {toast && ReactDOM.createPortal(
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 99999, maxWidth: 400 }}>
+          <div className={`alert alert-${toast.type} shadow-lg`} style={{ 
+            minWidth: 280, 
+            borderRadius: 12, 
+            marginBottom: 10,
+            animation: 'slideInRight 0.3s ease-out',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid var(--border-color)'
+          }}>
             <strong>{toast.title}</strong>: {toast.message}
           </div>
-        </div>
+          <style>{`
+            @keyframes slideInRight {
+              from { transform: translateX(100%); opacity: 0; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+          `}</style>
+        </div>,
+        document.body
       )}
 
       <div className="d-flex justify-content-between align-items-end mb-4">

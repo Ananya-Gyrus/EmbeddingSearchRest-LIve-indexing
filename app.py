@@ -159,7 +159,7 @@ def upload_files():
         app.logger.exception("Upload error")
         return jsonify({'error': str(e)}), 500
 
-OUTPUT_DIR = working_dir 
+OUTPUT_DIR = os.path.join(working_dir, 'database')
 @app.route('/list-indexed', methods=['GET'])
 def list_indexed_videos():
     videos = []
@@ -284,44 +284,30 @@ def serve_video(video_path):
         print(f"Error serving video clip: {e}")
         return Response(f"Error serving video clip: {str(e)}", status=500)
 
-@app.route('/thumbnail/<path:filename>')
-def get_thumbnail(filename):
+@app.route('/thumbnail/<path:video_path_relative>')
+def get_thumbnail(video_path_relative):
     """Generate or retrieve thumbnail for a video"""
     working_dir = current_app.config.get('WORKING_DIR', 'work_dir')
-    upload_folder = os.path.join(working_dir, 'uploads')
-    output_dir = os.path.join(working_dir, 'database')
+    # upload_folder = os.path.join(working_dir, 'uploads')
+    # output_dir = os.path.join(working_dir, 'database')
 
-    # Secure the filename
-    secure_name = secure_filename(os.path.basename(filename))
-    
-    # Try to find the video
-    video_path = os.path.join(upload_folder, secure_name)
-    
-    if not os.path.exists(video_path):
-        # If not found, try to find it using the database manager
-        db_manager = get_db_manager()
-        try:
-            # Search for the video in database
-            metadata = db_manager.get_video_metadata(secure_name)
-            if metadata and metadata.get('video_path_relative'):
-                relative_path = metadata['video_path_relative']
-                # Construct absolute path from working_dir
-                video_path = os.path.join(working_dir, relative_path)
-        except Exception as e:
-            print(f"Error finding video in database: {e}")
-    
+    if not os.path.exists(video_path_relative):
+        video_path = os.path.join(working_dir, video_path_relative)
+    else:
+        video_path = video_path_relative
+
     if not os.path.exists(video_path):
         abort(404)
     
     # Check for timestamp to extract specific frame
     timestamp = request.args.get('t', None)
     # Create thumbnails directory if it doesn't exist
-    thumbnails_dir = os.path.join(output_dir, 'thumbnails')
+    thumbnails_dir = os.path.join(working_dir, 'thumbnails')
     os.makedirs(thumbnails_dir, exist_ok=True)
     
     # Generate thumbnail filename
     thumbnail_suffix = f"_t{timestamp}" if timestamp else ""
-    thumbnail_filename = f"{os.path.splitext(secure_name)[0]}{thumbnail_suffix}.jpg"
+    thumbnail_filename = f"{os.path.splitext(os.path.basename(video_path_relative))[0]}{thumbnail_suffix}.jpg"
     thumbnail_path = os.path.join(thumbnails_dir, thumbnail_filename)
     # Generate thumbnail if it doesn't exist
     if not os.path.exists(thumbnail_path):

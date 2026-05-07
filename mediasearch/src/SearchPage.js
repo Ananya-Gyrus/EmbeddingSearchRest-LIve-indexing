@@ -663,8 +663,8 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
               } catch (err) { console.error("Failed to open path:", err); }
             };
 
-            const thumbnailUrl = r.metadata?.video_filename
-              ? `${apiBase}/thumbnail/${encodeURIComponent(r.metadata.video_filename)}${r.metadata.start_time_sec != null ? `?t=${r.metadata.start_time_sec}` : ''}`
+            const thumbnailUrl = r.metadata?.video_path_relative
+              ? `${apiBase}/thumbnail/${encodeURIComponent(r.metadata.video_path_relative)}${r.metadata.start_time_sec != null ? `?t=${r.metadata.start_time_sec}` : ''}`
               : null;
 
             return (

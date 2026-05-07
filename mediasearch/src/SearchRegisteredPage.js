@@ -369,7 +369,7 @@ export default function SearchRegisteredPage({ backendConfig }) {
               const meta = result.metadata || {};
               const score = parseFloat(result.score) || 0;
               const thumbTime = (meta.start_time_sec || 0) + ((meta.duration_sec || 0) / 2);
-              const thumbUrl = `${apiBase}/thumbnail/${encodeURIComponent(meta.video_filename || '')}?t=${thumbTime}`;
+              const thumbUrl = `${apiBase}/thumbnail/${encodeURIComponent(meta.video_path_relative || '')}?t=${thumbTime}`;
               return (
                 <div key={idx} className="col-md-4 col-sm-6">
                   <div className="sr-video-card" onClick={() => openPlayer(result)}>

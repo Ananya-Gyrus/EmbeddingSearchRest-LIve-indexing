@@ -16,7 +16,7 @@ from src.models.embedding import Qwen3VLEmbedder
 from vllm_infer import *
 import requests
 import base64
-
+from transformers.utils import is_flash_attn_2_available
 from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 import decord
@@ -78,10 +78,12 @@ def get_embedding_model(model_path="./checkpoints/embedding_model/snapshots/a12d
 
 text_model = None
 
+from faster_whisper import WhisperModel
+
 def get_audio_text_model(download_root="checkpoints/whisper"):
     global text_model
     if text_model is None:
-        text_model = whisper.load_model("medium", download_root=download_root)
+        text_model = WhisperModel("large-v3", device="cuda", compute_type="float16", download_root=download_root)
     return text_model
 
 def extract_frames(video_path: str, num_frames: int = 8) -> List[Image.Image]:
@@ -447,7 +449,7 @@ def get_text_embedding_batch(
 
 
 def get_image_embedding(
-    image: Union[str, Image.Image],
+    # image: Union[str, Image.Image],
     img_path: str,
     text: str = "",
     instruction: str = "Represent the given input."

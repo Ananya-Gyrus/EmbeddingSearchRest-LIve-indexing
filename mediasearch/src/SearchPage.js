@@ -558,7 +558,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
 
                     <select className="form-select modern-input" value={filters.index_type} onChange={e => setFilters({ ...filters, index_type: e.target.value })}>
                       <option value="">Select Index Type (default: video)</option>
-                      <option value="text">Text Index</option>
+                      <option value="text">Audio Index</option>
                       <option value="video">Video Index</option>
                     </select>
 

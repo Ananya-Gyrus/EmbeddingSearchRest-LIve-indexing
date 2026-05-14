@@ -59,6 +59,7 @@ const modernStyles = `
   }
 
   /* Core Overrides for Dark Mode Adaptability */
+  .min-w-0 { min-width: 0 !important; }
   .text-muted { color: var(--text-muted) !important; }
   
   .form-control, .input-group-text {
@@ -66,6 +67,7 @@ const modernStyles = `
     color: var(--text-main) !important;
     border-color: var(--border-color) !important;
     transition: all 0.2s ease;
+    text-overflow: ellipsis;
   }
   
   .form-control::placeholder {

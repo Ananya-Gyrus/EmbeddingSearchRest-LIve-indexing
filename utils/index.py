@@ -520,15 +520,32 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
             print(f"Skipping empty audio chunk: {audio_chunk_path}")
             continue
         # TODO: add language as portuguese?
-        text = text_model.transcribe(audio_chunk_path, word_timestamps=True)
-        new_text =  text['text'] if isinstance(text, dict) and 'text' in text else text
+        w_seg, w_info = text_model.transcribe(audio_chunk_path, word_timestamps=True, beam_size=10, language="ms")
+        w_seg =list(w_seg)
+        for segment in w_seg:
+            print("seg:", segment)
+            print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+        # print(w_seg)
+        # exit()
+        # new_text =  w_seg['text'] if isinstance(w_seg, dict) and 'text' in w_seg else w_seg
+        new_text = ""
+        for segment in w_seg:
+            new_text += segment.text + " "
+        new_text = new_text.strip()
         
         # total_sentences = text_buffer + " " + new_text
         # sentences = nltk.sent_tokenize(total_sentences)
-        sentences = [seg["text"] for seg in text["segments"]]
-        time_stamps = [(seg["start"], seg["end"]) for seg in text["segments"]]
-        no_speech_probs = [seg["no_speech_prob"] for seg in text["segments"]]
-        
+        # sentences = [seg.text for seg in w_seg]
+        # time_stamps = [(seg.start, seg.end) for seg in w_seg]
+        # no_speech_probs = [seg.no_speech_prob for seg in w_seg]
+        sentences = []
+        time_stamps = []
+        no_speech_probs = []
+        for segment in w_seg:
+            sentences.append(segment.text.strip())
+            time_stamps.append((segment.start, segment.end))
+            no_speech_probs.append(segment.no_speech_prob)
+        print("Sentences from chunk", i, ":", sentences)
         new_sentences = copy.deepcopy(sentences)
         # new_sentences = nltk.sent_tokenize(new_text)
         # new_sentences = [s.strip() for s in new_sentences if s.strip()]

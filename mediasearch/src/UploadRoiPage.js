@@ -37,6 +37,7 @@ const styles = `
     margin-bottom: 1rem;
   }
   .roi-item-card {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -47,6 +48,21 @@ const styles = `
     transition: all 0.2s;
     background: var(--card-bg);
     cursor: pointer;
+  }
+  .roi-item-registered {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(52, 211, 153, 0.18);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    font-size: 0.9rem;
   }
   .roi-item-card:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); }
   .roi-preview-img {
@@ -122,11 +138,28 @@ export default function UploadRoiPage({ backendConfig }) {
     setTimeout(() => setToasts(prev => prev.filter(x => x !== t)), 4000);
   }, []);
 
-  const loadCharacters = useCallback(() => {
-    fetch(`${apiBase}/get_saved_characters`)
-      .then(r => r.json())
-      .then(j => { if (j && j.characters) setSavedRois(j.characters); })
-      .catch(() => {});
+  const loadCharacters = useCallback(async () => {
+    try {
+      const [savedRes, registeredRes] = await Promise.all([
+        fetch(`${apiBase}/get_saved_characters`),
+        fetch(`${apiBase}/get_registered_characters`)
+      ]);
+      const savedJson = await savedRes.json();
+      const registeredJson = await registeredRes.json();
+      const registeredSet = new Set((registeredJson.characters || []).map(ch => ch.name));
+      if (savedJson && savedJson.characters) {
+        setSavedRois(savedJson.characters.map(ch => ({
+          ...ch,
+          registered: registeredSet.has(ch.name)
+        })));
+      }
+    } catch (err) {
+      console.error('Error loading saved characters:', err);
+      fetch(`${apiBase}/get_saved_characters`)
+        .then(r => r.json())
+        .then(j => { if (j && j.characters) setSavedRois(j.characters); })
+        .catch(() => {});
+    }
   }, [apiBase]);
 
   useEffect(() => { loadCharacters(); }, [loadCharacters]);
@@ -411,10 +444,15 @@ export default function UploadRoiPage({ backendConfig }) {
                     <small className="text-muted">{c.count} image(s)</small>
                   </div>
                 </div>
-                <button className="btn btn-sm" style={{ background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: 8 }}
+                {c.registered && (
+                  <span className="roi-item-registered" title="Already registered">
+                    <i className="bi bi-check-lg"></i>
+                  </span>
+                )}
+                {/* <button className="btn btn-sm" style={{ background: 'var(--danger-light)', color: 'var(--danger)', borderRadius: 8 }}
                   onClick={e => { e.stopPropagation(); removeCharacter(c.name); }}>
                   <i className="bi bi-trash-fill"></i>
-                </button>
+                </button> */}
               </div>
             ))}
           </div>

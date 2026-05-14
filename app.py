@@ -491,7 +491,7 @@ def search_registered_rest():
     db_name = data.get("dbName", "*")
     source_ids = data.get("sourceIds", None)
     image_sim_threshold = data.get("imageSimThreshold", 0.3)
-    character_weight = data.get("characterWeight", 0.6)
+    character_weight = data.get("characterWeight", 0.45)
     search_res, status_code = search_registered_api(
         character,
         action,

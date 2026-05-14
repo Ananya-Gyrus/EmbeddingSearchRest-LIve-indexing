@@ -11,7 +11,7 @@ import copy
 config = get_config()
 
 
-def search_registered_api(character, action, threshold, startIndex, limit, dbName, sourceIds=None, image_sim_threshold=0.3, character_weight = 0.6):
+def search_registered_api(character, action, threshold, startIndex, limit, dbName, sourceIds=None, image_sim_threshold=0.3, character_weight = 0.45):
     """
     Search across embeddings with support for different index types (video/audio/text)
     Args:

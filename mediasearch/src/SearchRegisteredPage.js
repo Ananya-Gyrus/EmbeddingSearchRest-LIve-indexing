@@ -97,7 +97,7 @@ export default function SearchRegisteredPage({ backendConfig }) {
   const [dbName, setDbName] = useState('');
   const [sourceIds, setSourceIds] = useState('');
   const [imgSimThresh, setImgSimThresh] = useState(0.3);
-  const [characterWeight, setCharacterWeight] = useState(0.6);
+  const [characterWeight, setCharacterWeight] = useState(0.45);
   const [limit, setLimit] = useState(20);
   const [startIndex, setStartIndex] = useState(1);
 
@@ -132,7 +132,7 @@ export default function SearchRegisteredPage({ backendConfig }) {
         dbName: dbName.trim() || '*',
         sourceIds: sourceIds.trim() ? sourceIds.split(',').map(s => s.trim()) : null,
         imgSimThresh: Number(imgSimThresh) || 0.3,
-        characterWeight: Number(characterWeight) || 0.6,
+        characterWeight: Number(characterWeight) || 0.45,
       };
       const res = await fetch(`${apiBase}/search-registered`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)

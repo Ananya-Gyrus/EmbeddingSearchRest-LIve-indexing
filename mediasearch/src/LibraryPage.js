@@ -428,7 +428,7 @@ export default function LibraryPage({ backendConfig, setShowSettings }) {
                         {v.indexTypes && v.indexTypes.map(it => (
                           <span key={it} className="badge-db-modern shadow-sm">
                             <i className={`bi ${it === 'video' ? 'bi-camera-video-fill text-primary' : 'bi-chat-text-fill text-info'}`}></i>
-                            {it}
+                            {it === 'text' ? 'Audio' : it}
                           </span>
                         ))}
                       </div>

@@ -251,7 +251,8 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
 
   const [dbList, setDbList] = useState([]);
   const [sourceList, setSourceList] = useState([]);
-  const [filters, setFilters] = useState({ query: '', dbName: '*', sourceId: '*', index_type: '' });
+  const [filters, setFilters] = useState({ query: '', dbName: '*', sourceId: '*', index_type: '', image_text: '' });
+  const [imagePage, setImagePage] = useState(1);
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -278,6 +279,7 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
       const res = await fetch(`${apiBase}/list-indexed`);
       const data = await res.json();
       if (data.videos) {
+        // console.log(data.videos);
         setDbList([...new Set(data.videos.map(v => v.dbName))]);
         setSourceList([...new Set(data.videos.map(v => v.sourceId))]);
       }
@@ -337,28 +339,41 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
     return (j.uploaded && j.uploaded[0] && j.uploaded[0].storedPath) ? j.uploaded[0].storedPath : (j.saved && j.saved[0] && j.saved[0].saved);
   };
 
-  const handleMediaSearch = async (type) => {
+  const handleMediaSearch = async (type, isLoadMore = false) => {
     const file = type === 'image' ? selectedImage : selectedAudio;
     if (!file) {
       Swal.fire({ text: `Please select an ${type} file first`, icon: 'warning', buttonsStyling: false, customClass: { popup: 'rounded-4 shadow-lg', confirmButton: 'btn btn-primary rounded-pill px-4' } });
       return;
     }
 
-    setLoading(true); setResults([]);
+    const startIdx = isLoadMore ? (imagePage * PAGE_LIMIT) + 1 : 1;
+    if (!isLoadMore) {
+      setResults([]);
+      setImagePage(1);
+    }
+    setLoading(true);
 
     try {
       const savedPath = await uploadFile(file);
       const endpoint = type === 'image' ? '/imagesearch' : '/audiosearch';
       const payloadKey = type === 'image' ? 'image_path' : 'audio_path';
+      const payload = {
+        [payloadKey]: savedPath,
+        startIndex: startIdx,
+        limit: PAGE_LIMIT,
+        dbName: filters.dbName === '*' ? undefined : filters.dbName,
+        text: filters.image_text ? filters.image_text : (filters.query ? filters.query : undefined),
+      };
 
       const res = await fetch(`${apiBase}${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [payloadKey]: savedPath, startIndex: 1, limit: PAGE_LIMIT })
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       const mediaResults = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
-      setResults(mediaResults);
+      setResults(prev => isLoadMore ? [...prev, ...mediaResults] : mediaResults);
+      if (isLoadMore) setImagePage(prev => prev + 1);
     } catch (e) {
       Swal.fire({ text: `${type} search failed: ${e.message}`, icon: 'error', buttonsStyling: false, customClass: { popup: 'rounded-4 shadow-lg', confirmButton: 'btn btn-primary rounded-pill px-4' } });
     } finally {
@@ -590,6 +605,23 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
                 </div>
                 <div className="col-md-4">
                   <div className="h-100 p-4 rounded-4 text-center d-flex flex-column justify-content-center align-items-center" style={{ backgroundColor: 'var(--bg-main)' }}>
+                    <div className="w-100 mb-3 text-start">
+                      <label className="form-label small fw-bold text-uppercase ms-1" style={{ color: 'var(--text-muted)' }}>Database</label>
+                      <select className="form-select modern-input" value={filters.dbName} onChange={e => setFilters({ ...filters, dbName: e.target.value })}>
+                        <option value="*">All Databases</option>
+                        {dbList.map(db => <option key={db} value={db}>{db}</option>)}
+                      </select>
+                    </div>
+                    <div className="w-100 mb-3 text-start">
+                      <label className="form-label small fw-bold text-uppercase ms-1" style={{ color: 'var(--text-muted)' }}>Reference Text</label>
+                      <input
+                        className="form-control modern-input"
+                        placeholder="Optional: describe what to look for (e.g., 'red car driving')"
+                        value={filters.image_text}
+                        onChange={e => setFilters({ ...filters, image_text: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && handleMediaSearch('image')}
+                      />
+                    </div>
                     <div className="small fw-bold text-uppercase mb-3" style={{ color: 'var(--text-muted)', letterSpacing: '1px' }}>Image Preview</div>
                     {imagePreview ? (
                       <div className="position-relative mb-4 w-100">
@@ -707,9 +739,9 @@ export default function SearchPage({ backendConfig, setShowSettings }) {
           })}
         </div>
 
-        {results.length > 0 && activeSearchTab === 'text' && (
+        {results.length > 0 && (activeSearchTab === 'text' || activeSearchTab === 'image') && (
           <div className="text-center pb-5 stagger-fade-in" style={{ animationDelay: '0.2s' }}>
-            <button className="btn btn-adaptive rounded-pill px-5 py-3 fw-bold shadow-sm d-inline-flex align-items-center gap-2" onClick={() => handleTextSearch(true)} disabled={loading}>
+            <button className="btn btn-adaptive rounded-pill px-5 py-3 fw-bold shadow-sm d-inline-flex align-items-center gap-2" onClick={() => activeSearchTab === 'text' ? handleTextSearch(true) : handleMediaSearch('image', true)} disabled={loading}>
               {loading ? <><span className="spinner-border spinner-border-sm text-primary"></span> <span style={{ color: 'var(--text-main)' }}>Loading Data...</span></> : <><i className="bi bi-arrow-down-circle fs-5 text-primary"></i> <span style={{ color: 'var(--text-main)' }}>Load More Results</span></>}
             </button>
           </div>

@@ -1,6 +1,7 @@
 import os
 import warnings
 import subprocess
+import time
 
 from db_utils import get_db_manager
 # ── Silence everything before any heavy imports ──────────────────────────────
@@ -38,7 +39,9 @@ from flask import Flask, jsonify, request, send_file, send_from_directory, Respo
 import argparse
 from utils.base import initialize_config, initialize_db_config
 from utils.index import index_videos
+from utils.index_live import process_live_indexing
 from utils.search import search_api, imagesearch_api, get_transcripts
+from config import get_config
 from utils.status import get_status
 from utils.licence import check_licence_validation, create_licence_requirement, get_remaining_credit
 from utils.remove import remove_video
@@ -47,10 +50,10 @@ from utils.imageRegister import register_images_api, remove_registered_character
 from flask_cors import CORS
 import tempfile
 from werkzeug.utils import secure_filename, safe_join
-
 import threading
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+config = get_config()
 from setup_db import setup_database
 
 
@@ -374,6 +377,176 @@ def index_videos_rest():
     db_name = data.get("dbName", "_default_db")
     index_status, statuscode = index_videos(filepaths, source_ids, video_fps_list, use_audio_list, is_video, scene_frames, db_name)
     return jsonify({"indexingstatus": index_status}), statuscode
+
+@app.route("/index-live", methods=["POST"])
+def index_live_rest():
+
+    try:
+
+        with app.app_context():
+
+            status = get_status_rest()
+
+            print("RAW STATUS =", status)
+
+            if isinstance(status, tuple):
+                status = status[0]
+
+            if hasattr(status, "get_json"):
+                status = status.get_json()
+
+            print("PARSED STATUS =", status)
+
+            if status.get(
+                "in_progress",
+                False,
+            ):
+                return jsonify({
+                    "error":
+                    "Indexing is already in progress."
+                }), 409
+
+    except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
+
+        return jsonify({
+            "error":
+            f"Status failure: {str(e)}"
+        }), 500
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "error":
+                "Missing JSON body"
+            }), 400
+
+        video_data = data.get(
+            "data",
+            [],
+        )
+
+        if not video_data:
+            return jsonify({
+                "error":
+                "No video data provided"
+            }), 400
+
+        if getattr(config, "live_indexing", False):
+            return jsonify({
+                "error":
+                "Live indexing already running"
+            }), 409
+
+        stream_paths = [
+            item["streamPath"]
+            for item in video_data
+        ]
+
+        if len(stream_paths) != 1:
+            return jsonify({
+                "error":
+                "Only one stream allowed"
+            }), 400
+
+        source_ids = [
+            item.get(
+                "sourceId",
+                "live_stream",
+            )
+            for item in video_data
+        ]
+
+        video_fps_list = [
+            item.get(
+                "fps",
+                30,
+            )
+            for item in video_data
+        ]
+
+        use_audio_list = [
+            item.get(
+                "useAudio",
+                False,
+            )
+            for item in video_data
+        ]
+
+        is_video = data.get(
+            "isVideo",
+            True,
+        )
+
+        db_name = data.get(
+            "dbName",
+            "_default_db",
+        )
+
+        scene_frames = {
+            item["sourceId"]:
+            item["sceneFrames"]
+            for item in video_data
+            if "sceneFrames"
+            in item
+        }
+
+        video_path = (
+            stream_paths[0]
+        )
+
+        source_id = (
+            source_ids[0]
+        )
+
+        video_fps = (
+            video_fps_list[0]
+        )
+
+        thread = threading.Thread(
+            target=process_live_indexing,
+            args=(
+                app,
+                [video_path],
+                source_id,
+                video_fps,
+                use_audio_list[0],
+                is_video,
+                db_name,
+                scene_frames,
+            ),
+            daemon=True,
+        )
+
+        thread.start()
+
+        time.sleep(2)
+
+        return jsonify({
+            "status":
+            "success",
+            "message":
+            "Live indexing started",
+            "sourceId":
+            source_id,
+        }), 202
+
+    except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
+
+        return jsonify({
+            "error":
+            str(e)
+        }), 500
 
 
 @app.route('/remove-video', methods=['POST'])

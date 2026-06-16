@@ -393,7 +393,7 @@ def process_embedding_batch_faiss(clip_tensor_batch, clip_metadata_batch, index,
     except Exception as e:
         print(f"Error processing batch")
 
-def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30):
+def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30, is_live=False):
     # Create debug directory structure
     debug_dir = os.path.join(config.OUTPUT_DIR, "..", "debug")
     os.makedirs(debug_dir, exist_ok=True)
@@ -505,12 +505,26 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30)
     config.indexing_status["overall_total_scenes"] += len(audio_chunks)
 
     max_chunk_indexed = db_manager.get_max_chunk_indexed(source_id, db_name)
+    start_chunk_idx = 0
+    remaining_time = 0
+
+    if is_live:
+        audio_progress = db_manager.get_audio_progress(source_id, db_name)
+
+        if audio_progress:
+            # get last audio chunk number and end time
+            start_chunk_idx = audio_progress['indexed_chunk_num'] + 1
+            remaining_time = audio_progress.get('remaining_time', 0)
+
+            print(
+                f"Resuming audio indexing from chunk "
+                f"{start_chunk_idx}, remaining_time={remaining_time}"
+            )
     
-    for i, audio_chunk_path in enumerate(audio_chunks):
+    for i, audio_chunk_path in enumerate(audio_chunks, start=start_chunk_idx):
         # Check if chunk already exists in database
         
-        if i <= max_chunk_indexed:
-            # print(f"Text chunk {i} for source_id {source_id} already indexed, skipping...")
+        if not is_live and i <= max_chunk_indexed:
             config.indexing_status["scenes_processed"] += 1
             continue
         
@@ -731,9 +745,12 @@ def save_video(frames, video_frame_rate, scene_save_path):
     saved_path = generate_video_from_frames(frames, video_frame_rate, scene_save_path)
     return saved_path
 
-def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list, is_video=True, scene_frames=None, db_name= "_default_db"):
+def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list, is_video=True, scene_frames=None, db_name= "_default_db", is_live=False):
     global vidReader, prevProcessedVideo
-    online = is_online()
+    global live_indexing
+
+    if live_indexing and not is_live:
+        return {'error': 'Live indexing is currently running'}, 409
 
     # Reset all status counters at the start
     config.indexing_status['in_progress'] = True
@@ -764,7 +781,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
     current_clip_metadata_batch = []
     new_usage_hours = 0.0
     embedding_dim = config.embedding_dimension
-    # res = faiss.StandardGpuResources() if torch.cuda.is_available() else None
+
     if index is None:
         index = faiss.IndexIDMap(faiss.IndexFlatIP(embedding_dim))
     video_idx = 0
@@ -779,13 +796,13 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
         config.indexing_status['total_scenes'] = len(scenes)
         config.indexing_status["overall_total_scenes"] += len(scenes)
         if use_audio:
-            index_audio_and_text(video_path, source_id, is_video, db_name, video_fps)
+            index_audio_and_text(video_path, source_id, is_video, db_name, video_frame_rate, is_live)
         # Get existing metadata for this video from DB
         existing_metadata = db_manager.get_metadata_by_source_id_and_type(source_id, "video", db_name)
         # print(existing_metadata)
         existing_embeddings_count = len(existing_metadata)
         # print("existing_embeddings_count", existing_embeddings_count)
-        if len(scenes) == existing_embeddings_count and len(scenes) > 0:
+        if not is_live and len(scenes) == existing_embeddings_count and len(scenes) > 0:
             # print("All scenes already indexed for this video, skipping:", video_filename)
             # If already indexed, count these scenes as processed
             config.indexing_status['scenes_processed'] += len(scenes)
@@ -804,13 +821,24 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
             video_idx += 1
             # config.indexing_status['total_scenes'] += len(scenes)
             continue
-        
+        existing_embeddings_last_index = 0
+        existing_embeddings_last_frame = 0
+        existing_embeddings_last_end_sec = 0
+        if is_live and existing_metadata:
+            if 'scene_index' in existing_metadata[-1]:
+                existing_embeddings_last_index = existing_metadata[-1]['scene_index']
+            if 'end_frame' in existing_metadata[-1]:
+                existing_embeddings_last_frame = existing_metadata[-1]['end_frame']
+            if 'end_time_sec' in existing_metadata[-1]:
+                existing_embeddings_last_end_sec = existing_metadata[-1]['end_time_sec']
+
         # config.indexing_status['total_scenes'] += len(scenes)
         succesfully_indexed_clips = 0
-        for i, (start_timecode, end_timecode) in enumerate(scenes):
+        for i, (start_timecode, end_timecode) in enumerate(scenes,start=existing_embeddings_last_index):
             try:
                 scene_idx = i + 1
                 embedding_filename = f"{db_name}_{source_id}_sc{scene_idx:04d}_emb"
+                # print("Embedding filename:", embedding_filename)
                 if embedding_filename in embedding_filenames:
                     config.indexing_status['scenes_processed'] += 1
                     config.indexing_status["overall_scenes_processed"] += 1
@@ -831,7 +859,6 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 try:
                     frames = sample_frames(video_path, source_id, start_sec, end_sec, config.FRAMES_PER_CLIP_FOR_EMBEDDING, video_frame_rate, is_video)
                 except Exception as e:
-                    print(f"Error sampling frames for {video_filename} (scene {scene_idx}): {e}")
                     if isinstance(e, DECORDError):
                         vidReader = VideoReader(video_path, ctx=cpu(0), num_threads=1)
                         frames = sample_frames(video_path, source_id, start_sec, end_sec, config.FRAMES_PER_CLIP_FOR_EMBEDDING, video_frame_rate, is_video)
@@ -856,18 +883,18 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 # if clip_tensor is None:
                 #     print(f'clip_tensor is none for {video_filename} (scene {scene_idx}), skipping...')
                 #     continue
-
+                
                 clip_metadata = {
                     "source_id": str(source_id),
                     "video_filename": secure_filename(video_filename),
                     "video_path_relative": os.path.relpath(video_path, os.path.dirname(config.OUTPUT_DIR)),
                     "total_scenes": len(scenes),
                     "scene_index": scene_idx,
-                    "start_frame": int(start_frame),
-                    "end_frame": int(end_frame),
-                    "start_time_sec": float(round(start_sec, 3)),
-                    "end_time_sec": float(round(end_sec, 3)),
-                    "duration_sec": float(round(duration_sec, 3)),
+                    "start_frame": start_frame + existing_embeddings_last_frame,
+                    "end_frame": end_frame + existing_embeddings_last_frame,
+                    "start_time_sec": round(start_sec + existing_embeddings_last_end_sec, 3),
+                    "end_time_sec": round(end_sec + existing_embeddings_last_end_sec, 3),
+                    "duration_sec": round(duration_sec, 3),
                     "embedding_filename": embedding_filename,
                     "embedding_type": "video",
                 }
@@ -885,7 +912,7 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                     # print("resetting to 1000 hours")
                     update_usage_hours(config.MONTHLY_RENEWAL_CREDITS)
                     config.OFFLINE_LICENSE_LIMIT_HOURS = config.MONTHLY_RENEWAL_CREDITS
-
+                
                 config.RECENT_DATE = todays_date
                 set_recent_date(config.RECENT_DATE)
 
@@ -894,7 +921,6 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
                 config.indexing_status["overall_scenes_processed"] += 1
 
                 # Only increment scenes_processed when actually processed (after batch)
-                # print(len(current_clip_tensor_batch), config.BATCH_SIZE)
                 if len(current_clip_tensor_batch) >= config.BATCH_SIZE:
                     # Update license hours
                     current_hours = config.OFFLINE_LICENSE_LIMIT_HOURS - new_usage_hours
@@ -963,10 +989,9 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
             index,
             db_name
         )
-
+        
         try:
             index_files = get_index_files(db_name)
-        
             # Convert indices to CPU if needed
             # if torch.cuda.is_available():
             #     video_index_cpu = faiss.index_gpu_to_cpu(index)
@@ -983,8 +1008,8 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
             for img in frame_list:
                 if hasattr(img, 'close'):
                     img.close()
-            frame_list.clear()
-    # del model
+            frame_list.clear() 
+    #del model
     current_clip_tensor_batch.clear()
     current_clip_metadata_batch.clear()
     current_clip_tensor_batch = []
@@ -1000,14 +1025,13 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-        
-        # Run GC multiple times to ensure cleanup
+
     gc.collect()
     gc.collect()
     del index
     print(f"Indexing completed, Given: {len(video_files)} videos, Successfully Indexed: {succesfully_indexed}, Time Elapsed: {time.time() - config.indexing_status['start_time']} seconds")
 
-def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video, scene_frames, db_name):
+def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video, scene_frames, db_name, is_live=False):
 
     if not check_licence_validation():
         return {'error': 'License expired or invalid'}, 403
@@ -1019,6 +1043,9 @@ def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video,
     if config.indexing_status['in_progress']:
         return {'error': 'Indexing already in progress'}, 409
     
+    if config.live_indexing :
+        return {'error': 'Live indexing already in progress'}, 409
+
     if config.removal_in_progress:
         return {'error': 'Removal process in progress, please try again later'}, 409
 
@@ -1050,7 +1077,7 @@ def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video,
             else:
                 return {'error': f'File not found: {secure_name}'}, 404
         threading.Thread(target=run_indexing_process, 
-                         args=(video_paths, sourceIds, video_fps_list, use_audio_list, is_video , scene_frames, db_name)).start()
+                         args=(video_paths, sourceIds, video_fps_list, use_audio_list, is_video , scene_frames, db_name, is_live)).start()
         time.sleep(3)
         return {'success': True, 
                         'message': f'Started Indexing {len(video_paths)} videos as a group',
@@ -1066,7 +1093,7 @@ def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video,
         if not os.path.isfile(file_path) and (is_video or not os.path.isdir(file_path)):
             return {'error': f"""File not found or directory invalid {file_path}"""}, 404
         threading.Thread(target=run_indexing_process, 
-                         args=([file_path], sourceIds, video_fps_list, use_audio_list, is_video, scene_frames, db_name)).start()
+                         args=([file_path], sourceIds, video_fps_list, use_audio_list, is_video, scene_frames, db_name, is_live)).start()
         time.sleep(3)
         
         return {'success': True, 'message': f'Started Indexing {filename}'}, 200

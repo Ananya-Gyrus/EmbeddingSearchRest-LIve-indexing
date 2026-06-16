@@ -35,6 +35,7 @@ def get_status():
     return {
         'remaining_credits': config.OFFLINE_LICENSE_LIMIT_HOURS,
         'in_progress': config.indexing_status['in_progress'],
+        'live_in_progress': getattr(config, 'live_indexing', False),
         'current_video': config.indexing_status['current_video'],
         'processed_videos': config.indexing_status['processed_videos'],
         'processed_audios': config.indexing_status['processed_audios'],

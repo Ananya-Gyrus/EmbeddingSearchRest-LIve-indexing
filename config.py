@@ -79,6 +79,7 @@ class AppConfig:
         self.removal_in_progress = False
         self.registration_in_progress = False
         self.registration_errors = []
+        self.live_indexing = False
 
     
     def initialize_config(self, app):

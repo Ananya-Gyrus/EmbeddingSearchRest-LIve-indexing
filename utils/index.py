@@ -997,7 +997,6 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
             #     video_index_cpu = faiss.index_gpu_to_cpu(index)
             # else:
             #     video_index_cpu = index
-
             # Save video embeddings
             if not save_index(index_files['video'], index):
                 config.indexing_status['errors'].append("Failed to save video index")

@@ -4,7 +4,6 @@ import gc
 import threading
 import subprocess
 import queue
-from flask import app, jsonify
 import m3u8
 
 from config import get_config
@@ -66,7 +65,6 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
                 ),
         daemon=True,
     )
-
     ffmpeg_thread.start()
     print("Started FFmpeg chunking thread")
     detected_chunks = set()
@@ -126,18 +124,13 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
             with app.app_context():
                 try:
                     status = get_status()
-
                     if isinstance(status, tuple):
                         status = status[0]
-
                     print("STATUS =", status)
-
                     if not status.get("in_progress", False):
                         break
-
                 except Exception as e:
                     print(f"Status error: {e}")
-
             time.sleep(2)
 
         chunk_path_in_wd = os.path.relpath(chunk_path, start=config.WORKING_DIR,)

@@ -747,9 +747,8 @@ def save_video(frames, video_frame_rate, scene_save_path):
 
 def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list, is_video=True, scene_frames=None, db_name= "_default_db", is_live=False):
     global vidReader, prevProcessedVideo
-    global live_indexing
 
-    if live_indexing and not is_live:
+    if config.live_indexing and not is_live:
         return {'error': 'Live indexing is currently running'}, 409
 
     # Reset all status counters at the start

@@ -9,16 +9,14 @@ import m3u8
 from config import get_config
 from utils.status import get_status
 from utils.index import index_videos
-live_indexing = False
 
 config = get_config()
 
 def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_video, db_name, scene_frames,):
-    global live_indexing
-    if live_indexing:
+    if config.live_indexing:
         print("Live indexing already running")
         return
-    live_indexing = True
+    config.live_indexing = True
     stream_url = filepaths[0]
     stream_name = os.path.splitext(
         os.path.basename(stream_url)
@@ -71,7 +69,7 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
     def chunk_watcher():
         chunk_counter = 0
         wait_time = 0
-        while live_indexing:
+        while config.live_indexing:
             chunk_filename = f"{stream_name}_{chunk_counter:03d}.mp4"
             chunk_path = os.path.join(chunk_dir, chunk_filename)
             if not os.path.exists(chunk_path):
@@ -89,7 +87,7 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
             wait_time = 0
             prev_size = -1
             stable_count = 0
-            while stable_count < 3 and live_indexing:
+            while stable_count < 3 and config.live_indexing:
                 try:
                     current_size = os.path.getsize(chunk_path)
                     if (current_size > 0 and current_size == prev_size):
@@ -113,14 +111,14 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
     watcher_thread.start()
     print("Started chunk watcher thread")
 
-    while live_indexing:
+    while config.live_indexing:
         try:
             chunk_path = chunk_queue.get(timeout=5)
         except queue.Empty:
             continue
         chunk_filename = os.path.basename(chunk_path)
         print(f"Dequeued {chunk_filename} "f"for indexing")
-        while live_indexing:
+        while config.live_indexing:
             with app.app_context():
                 try:
                     status = get_status()
@@ -135,9 +133,9 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
 
         chunk_path_in_wd = os.path.relpath(chunk_path, start=config.WORKING_DIR,)
         try:
-            config.indexing_status = (index_videos([chunk_path_in_wd],[source_id],[video_fps],[use_audio], is_video,scene_frames, db_name, True,))
+            index_videos([chunk_path_in_wd],[source_id],[video_fps],[use_audio], is_video,scene_frames, db_name, True,)
             print(f"Started indexing "f"{chunk_filename}")
-            while live_indexing:
+            while config.live_indexing:
                 time.sleep(2)
                 with app.app_context():
                     try:
@@ -167,7 +165,6 @@ def process_live_indexing(app,filepaths, source_id, video_fps, use_audio, is_vid
             gc.collect()
             time.sleep(5)
 
-
-    print("Stopping live indexing")
-
-    live_indexing = False
+        finally:
+            print("Stopping live indexing")
+            config.live_indexing = False

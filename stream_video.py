@@ -17,7 +17,7 @@ def start_hls_stream(video_path):
         "-1",
         "-i",
         video_path,
-        "-c:v",
+        "-c:v",  
         "libx264",
         "-c:a",
         "aac",
@@ -28,7 +28,7 @@ def start_hls_stream(video_path):
         "-hls_list_size",
         "10",
         "-hls_flags",
-        "delete_segments+append_list",
+        "append_list",
         "-hls_segment_filename",
         os.path.join(
             output_dir,

@@ -379,7 +379,6 @@ def index_videos_rest():
 
 @app.route('/index-live', methods=['POST'])
 def index_live_rest():
-    global live_indexing
     # if not app.config.get('ENABLE_LIVE_INDEXING', False):
     #     return jsonify({"error": "Live indexing feature is disabled."}), 403
     with app.app_context():
@@ -395,7 +394,7 @@ def index_live_rest():
     if not video_data:
         return jsonify({"error": "No video data provided"}), 400
     
-    if live_indexing:
+    if config.live_indexing:
         return jsonify({"error": "A live stream is already being indexed. Please wait until it finishes."}), 409
     
     # Clean up filepath by removing trailing slash

@@ -41,7 +41,7 @@ from utils.base import initialize_config, initialize_db_config
 from utils.index import index_videos
 from utils.index_live import process_live_indexing
 from utils.search import search_api, imagesearch_api, get_transcripts
-from config import get_config
+from config import get_config 
 from utils.status import get_status
 from utils.licence import check_licence_validation, create_licence_requirement, get_remaining_credit
 from utils.remove import remove_video
@@ -383,20 +383,23 @@ def index_live_rest():
     #     return jsonify({"error": "Live indexing feature is disabled."}), 403
     with app.app_context():
         try:
-            status, _ = get_status_rest()
+            response = get_status_rest()
+            if isinstance(response, tuple):
+                response = response[0]
+            status = response.get_json()
+            print("STATUS =", status)
             if status["in_progress"]:
                 return jsonify({"error": "Indexing is already in progress."}), 409
-        except:
-            return jsonify({"error": "Unable to get system status."}), 500
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": "Unable to get system status.","details": str(e)}), 500
     data = request.get_json()
     video_data = data.get("data", [])
-
     if not video_data:
         return jsonify({"error": "No video data provided"}), 400
-    
     if config.live_indexing:
         return jsonify({"error": "A live stream is already being indexed. Please wait until it finishes."}), 409
-    
     # Clean up filepath by removing trailing slash
     stream_paths = [item["streamPath"] for item in video_data]
     if len(stream_paths) != 1:
@@ -414,7 +417,7 @@ def index_live_rest():
     video_fps = video_fps_list[0]
     
     import threading
-    indexing_thread = threading.Thread(target=process_live_indexing, args=(app,[video_path], source_id, video_fps, use_audio_list[0], is_video, db_name, scene_frames))
+    indexing_thread = threading.Thread(target=process_live_indexing, args=(app, source_id, video_fps, use_audio_list[0], is_video, db_name, scene_frames))
     indexing_thread.start()
     time.sleep(2)  # Give the thread a moment to start
     return jsonify({
@@ -617,7 +620,6 @@ def save_roi():
     except Exception as e:
         print(f"Error saving ROI: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/get_registered_characters', methods=['GET'])
 def get_registered_characters():

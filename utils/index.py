@@ -509,19 +509,20 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30,
     remaining_time = 0
 
     if is_live:
-        audio_progress = db_manager.get_audio_progress(source_id, db_name)
+        start_chunk_idx = 0
+    else:
+        start_chunk_idx = db_manager.get_max_chunk_indexed(source_id, db_name) + 1
 
-        if audio_progress:
-            # get last audio chunk number and end time
-            start_chunk_idx = audio_progress['indexed_chunk_num'] + 1
-            remaining_time = audio_progress.get('remaining_time', 0)
-
+        if start_chunk_idx > 0:
             print(
-                f"Resuming audio indexing from chunk "
-                f"{start_chunk_idx}, remaining_time={remaining_time}"
+                f"Resuming audio indexing "
+                f"from chunk {start_chunk_idx}"
             )
     
-    for i, audio_chunk_path in enumerate(audio_chunks, start=start_chunk_idx):
+    for i, audio_chunk_path in enumerate(
+        audio_chunks[start_chunk_idx:],
+        start=start_chunk_idx
+    ):
         # Check if chunk already exists in database
         
         if not is_live and i <= max_chunk_indexed:
@@ -534,38 +535,22 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30,
             print(f"Skipping empty audio chunk: {audio_chunk_path}")
             continue
         # TODO: add language as portuguese?
-        w_seg, w_info = text_model.transcribe(audio_chunk_path, word_timestamps=True, beam_size=10, language="ms")
-        w_seg =list(w_seg)
-        for segment in w_seg:
-            print("seg:", segment)
-            print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-        # print(w_seg)
-        # exit()
-        # new_text =  w_seg['text'] if isinstance(w_seg, dict) and 'text' in w_seg else w_seg
-        new_text = ""
-        for segment in w_seg:
-            new_text += segment.text + " "
-        new_text = new_text.strip()
+        text = text_model.transcribe(audio_chunk_path, word_timestamps=True)
+        new_text =  text['text'] if isinstance(text, dict) and 'text' in text else text
         
         # total_sentences = text_buffer + " " + new_text
         # sentences = nltk.sent_tokenize(total_sentences)
-        # sentences = [seg.text for seg in w_seg]
-        # time_stamps = [(seg.start, seg.end) for seg in w_seg]
-        # no_speech_probs = [seg.no_speech_prob for seg in w_seg]
-        sentences = []
-        time_stamps = []
-        no_speech_probs = []
-        for segment in w_seg:
-            sentences.append(segment.text.strip())
-            time_stamps.append((segment.start, segment.end))
-            no_speech_probs.append(segment.no_speech_prob)
-        print("Sentences from chunk", i, ":", sentences)
+        sentences = [seg["text"] for seg in text["segments"]]
+        time_stamps = [(seg["start"], seg["end"]) for seg in text["segments"]]
+        no_speech_probs = [seg["no_speech_prob"] for seg in text["segments"]]
+        
         new_sentences = copy.deepcopy(sentences)
         # new_sentences = nltk.sent_tokenize(new_text)
         # new_sentences = [s.strip() for s in new_sentences if s.strip()]
         if not text_buffer:
             buffer_start_chunk_index = i
             buffer_start_time = i * chunk_duration + time_stamps[0][0] if sentences else 0
+        
         
         if sentences:
             sentences[0] = text_buffer + sentences[0]
@@ -734,7 +719,7 @@ def index_audio_and_text(video_path, source_id, is_video, db_name, video_fps=30,
     debug_transcript_path = os.path.join(debug_dir, f"{video_name}_transcripts.json")
     with open(debug_transcript_path, 'w') as f:
         json.dump({f"{video_name}": aud_trans_debug}, f, indent=4)
-    del text_model
+    #del text_model
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     return
@@ -795,7 +780,10 @@ def run_indexing_process(video_files, sourceIds, video_fps_list, use_audio_list,
         config.indexing_status['total_scenes'] = len(scenes)
         config.indexing_status["overall_total_scenes"] += len(scenes)
         if use_audio:
+            print("START AUDIO INDEXING")
             index_audio_and_text(video_path, source_id, is_video, db_name, video_frame_rate, is_live)
+            print("END AUDIO INDEXING")
+
         # Get existing metadata for this video from DB
         existing_metadata = db_manager.get_metadata_by_source_id_and_type(source_id, "video", db_name)
         # print(existing_metadata)
@@ -1041,7 +1029,7 @@ def index_videos(filepaths, sourceIds, video_fps_list, use_audio_list, is_video,
     if config.indexing_status['in_progress']:
         return {'error': 'Indexing already in progress'}, 409
     
-    if config.live_indexing :
+    if config.live_indexing and not is_live:
         return {'error': 'Live indexing already in progress'}, 409
 
     if config.removal_in_progress:

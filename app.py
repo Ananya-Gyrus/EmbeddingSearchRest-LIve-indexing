@@ -405,19 +405,19 @@ def index_live_rest():
     if len(stream_paths) != 1:
         return jsonify({"error": "Only one live stream can be indexed at a time."}), 400
 
-    source_ids = [item.get("sourceId", "live_stream")for item in video_data]    
+    stream_path = stream_paths[0]
+    source_ids = [item.get("sourceId", stream_path)for item in video_data]    
     video_fps_list = [item.get("fps", 30) for item in video_data]
     use_audio_list = [item.get("useAudio", False) for item in video_data]
     is_video = data.get("isVideo", True)
     db_name = data.get("dbName", "_default_db")
     scene_frames = {item["sourceId"]: item["sceneFrames"] for item in video_data if "sceneFrames" in item}
     
-    video_path = stream_paths[0]
     source_id = source_ids[0]
     video_fps = video_fps_list[0]
     
     import threading
-    indexing_thread = threading.Thread(target=process_live_indexing, args=(app, source_id, video_fps, use_audio_list[0], is_video, db_name, scene_frames))
+    indexing_thread = threading.Thread(target=process_live_indexing, args=(app,stream_path, source_id, video_fps, use_audio_list[0], is_video, db_name, scene_frames))
     indexing_thread.start()
     time.sleep(2)  # Give the thread a moment to start
     return jsonify({

@@ -82,9 +82,7 @@ def process_live_indexing(filepaths,source_id,video_fps,use_audio,is_video,db_na
                     [use_audio],
                     is_video,
                     scene_frames,
-                    db_name,
-                    True,
-                )
+                 db_name, True,)
                 print("Indexed byte-range")
             except Exception as e:
                 print(f"Index error: "f"{e}")

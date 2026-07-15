@@ -12,13 +12,13 @@ from utils.index import index_videos
 
 config = get_config()
 
-def process_live_indexing(app, source_id, video_fps, use_audio, is_video, db_name, scene_frames,):
+def process_live_indexing(app, stream_path, source_id, video_fps, use_audio, is_video, db_name, scene_frames,):
     if config.live_indexing:
         print("Live indexing already running")
         return
     config.live_indexing = True
-    stream_url = os.path.abspath("hls_output/playlist.m3u8")    
-    stream_name = os.path.splitext(os.path.basename(stream_url))[0]
+    stream_url = stream_path    
+    stream_name = source_id
 
     if not stream_name:
         stream_name = source_id
@@ -44,8 +44,6 @@ def process_live_indexing(app, source_id, video_fps, use_audio, is_video, db_nam
         "-g", "1440",
         "-keyint_min", "1440",
         "-sc_threshold", "0",
-        # Force an I-frame every 60 seconds
-        "-force_key_frames", "expr:gte(t,n_forced*60)",
         "-c:a", "aac",
         "-f", "segment",
         "-segment_time", "60",
@@ -81,10 +79,7 @@ def process_live_indexing(app, source_id, video_fps, use_audio, is_video, db_nam
 
                 try:
                     playlist = m3u8.load(stream_url)
-                    print(
-                        f"Playlist refresh: "
-                        f"{len(playlist.segments)} segments available"
-                    )
+                    print(f"Playlist refresh: "f"{len(playlist.segments)} segments available")
                 except Exception as e:
                     print(f"Playlist refresh failed: {e}")
                 if wait_time > 120:

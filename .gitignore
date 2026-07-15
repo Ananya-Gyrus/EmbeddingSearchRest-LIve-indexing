@@ -14,4 +14,4 @@ new_dir/
 *.tar
 ubuntu*
 index_live_byte/
-hls_output/
+hls_output
